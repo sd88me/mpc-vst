@@ -30,8 +30,9 @@ See [docs/NOTES.md](docs/NOTES.md) for details, gotchas, and open issues.
 
 - `wrapper/vst2_wrap.c`: a generic VST2 ⇄ Schwung `plugin_api_v2` wrapper. You link
   it with any Schwung DSP plus a generated `params.h`.
-- `tools/gen_vst.py`: generates `params.h`, the skin, and the `pluginList` entry from
-  a Schwung `module.json` (currently configured for Maze Voice; see TODO).
+- `tools/build_port.sh` + `tools/gen_vst.py`: the generic port builder. A Schwung module ports with one small
+  `vst.json` (name, uid, sources, optional layout) and no code: `tools/build_port.sh path/to/vst.json` makes the
+  `.so`, the skin and the `pluginList` entry. See [docs/PORTING.md](docs/PORTING.md).
 - `tools/shadow_skin.py` + `tools/shadow_art.c`: build a skin from a Force Shadow style layout
   (`shadow_page.conf` widget syntax: frames, knobs, toggles, triggers, option segments, plus
   `qlinks` lines for nested pages). The artwork (backgrounds, knob filmstrips, button states) is drawn by

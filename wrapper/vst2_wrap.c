@@ -16,6 +16,9 @@
 #include <math.h>
 #include <ctype.h>
 #include "params.h"
+#ifndef HAS_LFO_BPM
+#define HAS_LFO_BPM 0 /* 1: pass the host tempo to the DSP as "lfo_bpm" */
+#endif
 
 /* ---- Schwung plugin_api_v2 (see src/include/plugin_api_v1.h) ------------ */
 typedef struct {

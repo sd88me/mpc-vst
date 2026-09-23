@@ -47,8 +47,8 @@ from the Force and may differ on MPC Live/One/X/Key (e.g. `Force Documents` vs `
    component (stock skins add Labels and `Focus` overlays), or knob bounds/`showWhenDataModelInvalid`.
    Compare the rendered page against Bassline's component set.
 3. Note timing is quantised to 128-frame DSP blocks (same as Move).
-4. `gen_vst.py` is Maze-specific (NAME/UID/TABS at the top). Next: read those from a small per-port
-   `vst.json` next to `module.json` so any Schwung module (force-acid, …) ports with no code.
+4. ~~`gen_vst.py` is Maze-specific.~~ Done 2026-09-24: `tools/build_port.sh` + a per-port `vst.json`; Maze builds through
+   it byte-identically (same `.so` md5).
 5. Maze's knob-touch note filter (notes 0..9) is compiled out with `-DMAZE_VST=1`, which is built but
    **not yet deployed** (md5 b10668a4…).
 6. **MIDI-output plugins: MPC OS ignores plugin MIDI out** (tested 2026-09-23 with `poc/midiout.c`).

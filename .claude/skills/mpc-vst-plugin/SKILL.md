@@ -8,7 +8,7 @@ description: Build, skin, register and test native VST2 plugins for the built-in
 
 This skill lives in the repo (https://github.com/sd88me/mpc-vst-plugins). Read `docs/NOTES.md` first (verified facts,
 open issues, resume point) and `docs/PORTING.md` (step-by-step checklist). Reference port: Maze Voice in
-https://github.com/sd88me/force-maze, `maze-voice/vst/` (build.sh, gen_vst.py, layout.conf, vst2_wrap.c).
+https://github.com/sd88me/force-maze, `maze-voice/vst/` (vst.json, layout.conf; build.sh just calls `tools/build_port.sh`).
 Device: reached over SSH as root. BusyBox userland (`head -n 5`, no `grep -b`), and the IP is DHCP, so ask
 the user for it. **Ask before restarting MPC** (`systemctl restart acvs`), because it takes the screen down.
 Stop any separately attached audio engines first.
@@ -18,11 +18,11 @@ Stop any separately attached audio engines first.
    `params.h` → one `.so` exporting only `VSTPluginMain` (+ DSP init). The Force runs at 44.1k/128 frames,
    the same as the Move, so no DSP changes are needed. Compile out Move-only quirks with a `-D<NAME>_VST` flag
    (e.g. Maze's notes 0..9 knob-touch filter).
-2. **Generate** (`gen_vst.py`): params table from `module.json` chain_params (VST index = order),
-   skin folder `<vendor> - VST - <name>/` with `version.xml`, `Plugin Skins/TUI.json`, `Q-Links.json`,
-   `Q-Links - 8by1.json`, and `pluginlist-entry.xml`. TABS = tabs → nested pages (fnKeySubIndex) → ≤16 params,
-   laid out 2 rows of 8 (row = Force knob bank). Needs pillow + DejaVu fonts (build.sh runs it in python:3.11-slim).
-3. **Build**: `docker run --platform linux/arm/v7 arm32v7/gcc:12` (glibc ≤ 2.39), `-fvisibility=hidden -shared -fPIC`.
+2. **Generate + build**: `tools/build_port.sh <port>/vst.json` (steps 2-3 in one; Docker). `gen_vst.py` makes the
+   params table from `module.json` chain_params (VST index = order), the skin folder `<vendor> - VST - <name>/`
+   (from vst.json's `layout`, else a studio auto-layout) and `pluginlist-entry.xml`. The compile uses
+   `arm32v7/gcc:12` (glibc ≤ 2.39), `-fvisibility=hidden -shared -fPIC`, and links `wrapper/vst2_wrap.c` from this repo.
+3. **Bench**: `tools/bench.sh build/x.so <ip>` must PASS before release (docs/BENCH.md).
 4. **Offline test first**: `tools/host_test.c` on x86 with ASan (`gcc:12` image), checking two instances,
    param set/get/display, note→non-zero RMS, chunk round-trip.
 5. **Deploy (staged)**: `.so` → `/sdcard/vst/x.so.new` then `mv`; skin via `tar | ssh tar -C /sdcard/Synths -xf -`
@@ -65,9 +65,9 @@ Name ports plainly (e.g. client "<Plugin>", port "MIDI Out"): no "(Mockba)" suff
 references kept out of mpc-vst.
 
 ## Custom layouts from Force Shadow pages (preferred for final skins)
-Put a `layout.conf` next to the port's gen_vst.py (Maze: `force-maze/maze-voice/vst/layout.conf`), in
+Put a `layout.conf` next to the port's vst.json (Maze: `force-maze/maze-voice/vst/layout.conf`), in
 shadow_page.conf widget syntax plus `qlinks "PAGE" = key,...` lines (each one is a nested page with the same design and
-its own Q-Links) and `rows=` on enum_h. gen_vst.py then calls `shadow_skin.py` (mpc-vst/tools), which drives
+its own Q-Links) and `rows=` on enum_h, and set `"layout"` in vst.json. gen_vst.py then calls `shadow_skin.py` (mpc-vst/tools), which drives
 `shadow_art` (built from `shadow_art.c` with `-I<force-shadow>/tools`, since it #includes render_conf_preview.c) to draw
 backgrounds, knob filmstrips and button states. Shadow y−86 = skin y. Option counts must match module.json.
 Check offline before deploying: composite TUI.json + PNGs into a preview image (paste each component at its bounds)
