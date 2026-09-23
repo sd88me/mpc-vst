@@ -11,8 +11,8 @@ Layout file:
     knob    cx= cy= r= label="..." key=<param>
     toggle  cx= cy= label="..." key=<param>
     button  cx= cy= label="..." key=<param>          (trigger)
-    enum_h  cx= cy= label="..." key=<param> options="A,B,.." [sw=<px>] [rows=<n>]
-    enum_v  cx= cy= label="..." key=<param> options="A,B,.."
+    enum_h  cx= cy= label="..." key=<param> [options="A,B,.."] [sw=<px>] [rows=<n>]
+    enum_v  cx= cy= label="..." key=<param> [options="A,B,.."]   (options default to the param's)
     readout cx= cy= w= h= label="..." key=<param>      (live value text)
     stepper cx= cy= w= h= label="..." key=<param>      (live text; arrows = <param>_prev / <param>_next)
     list    x= y= w= h= cols= rows= th= gap= key=<p>   (rows = params <p>_1..<p>_N: text + tap)
@@ -251,6 +251,8 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                 controls += list_keys(w)
                 continue
             p = params[index[k]]
+            if w["kind"].startswith("enum") and not w.get("options"):
+                w["options"] = [str(o).upper() for o in p.get("options") or []]   # default: the parameter's own
             if w["kind"].startswith("enum") and len(w["options"]) != len(p.get("options") or []):
                 raise SystemExit("layout: %s has %d options, parameter has %d" % (k, len(w["options"]), len(p.get("options") or [])))
             controls.append(k)

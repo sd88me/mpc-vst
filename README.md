@@ -37,6 +37,8 @@ See [docs/NOTES.md](docs/NOTES.md) for details, gotchas, and open issues.
   `qlinks` lines for nested pages). The artwork (backgrounds, knob filmstrips, button states) is drawn by
   [force-shadow](https://github.com/sd88me/force-shadow)'s own renderer, so the MPC page matches the
   shadow page pixel for pixel. Needs a force-shadow checkout to build `shadow_art`.
+- `tools/studio.py` + `tools/skin_template.svg`: the skin studio. Auto-layout from a module's
+  parameters, an Inkscape/Penpot SVG round trip, and page previews. See [docs/SKIN_STUDIO.md](docs/SKIN_STUDIO.md).
 - `tools/host_test.c`: an offline x86 host test (instances, params, MIDI→audio, chunks).
 - `poc/gain.c`, `poc/synth.c`: minimal effect / instrument examples.
 - `poc/midiport.c`: a MIDI-generating plugin (tempo-synced) that drives other tracks through an ALSA port

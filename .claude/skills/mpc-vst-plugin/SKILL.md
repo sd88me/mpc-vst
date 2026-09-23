@@ -72,3 +72,8 @@ its own Q-Links) and `rows=` on enum_h. gen_vst.py then calls `shadow_skin.py` (
 backgrounds, knob filmstrips and button states. Shadow y−86 = skin y. Option counts must match module.json.
 Check offline before deploying: composite TUI.json + PNGs into a preview image (paste each component at its bounds)
 and look at it. Skin-only changes need no restart.
+
+## Skin studio (layout design)
+`tools/studio.py`: `auto` (params → first-pass layout.conf), `to-svg` / `from-svg` (Inkscape round trip; tabs are layers,
+controls are labelled groups, Q-Links in layer descriptions), `preview` (built skin → PNGs). Read docs/SKIN_STUDIO.md.
+Always `preview` before deploying. Enum `options=` are optional in layouts (they default to the parameter's own).
