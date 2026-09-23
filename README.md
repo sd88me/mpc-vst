@@ -11,6 +11,8 @@ a gain effect, a test synth, and [Maze Voice](https://github.com/sd88me/force-ma
 It should behave the same on other Gen1 MPC OS hardware, since the same `MPC` binary is involved; reports are welcome.
 Gen2 devices (e.g. Live III) are reported to be more locked down.
 
+<img width="906" height="570" alt="image" src="https://github.com/user-attachments/assets/3bb29544-0cd0-409f-b5b4-7df67ddbaf9a" />
+
 ## How it works
 
 1. MPC OS reads `<VALUE name="pluginList-arm"><KNOWNPLUGINS>…` from its
