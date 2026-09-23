@@ -32,6 +32,8 @@ See [docs/NOTES.md](docs/NOTES.md) for details, gotchas, and open issues.
   a Schwung `module.json` (currently configured for Maze Voice; see TODO).
 - `tools/host_test.c`: an offline x86 host test (instances, params, MIDI→audio, chunks).
 - `poc/gain.c`, `poc/synth.c`: minimal effect / instrument examples.
+- `poc/midiport.c`: a MIDI-generating plugin (tempo-synced) that drives other tracks through an ALSA port
+  (MPC OS ignores VST MIDI output; `poc/midiout.c` shows that).
 
 ## Credits
 

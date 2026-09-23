@@ -50,5 +50,11 @@ from the Force and may differ on MPC Live/One/X/Key (e.g. `Force Documents` vs `
    `audioMasterProcessEvents` is accepted silently and the events go nowhere. A plugin can't be picked as
    a MIDI input on another track, and the track's "MIDI send to" only forwards the notes coming *into* it.
    Transport/tempo via `audioMasterGetTime` do work (flags 0x7fc4, tempo and ppqPos valid), and so does MIDI in.
-   Next idea: a sequencer plugin that syncs to ppqPos but emits notes to an ALSA virtual MIDI port
-   (as the MockbaMod addons do) that tracks select as MIDI input. Untested.
+   **Workaround, verified 2026-09-23 (`poc/midiport.c`):** the plugin opens its own ALSA sequencer client/port
+   (`snd_seq_create_simple_port`, CAP_READ|SUBS_READ; link `-lasound`, which ships with MPC OS) and sends notes
+   with `snd_seq_event_output_direct`, synced to host `ppqPos`/tempo. MPC's own seq client ("MPC") hot-detects the
+   new port, creates a matching input ("<client> <port>") and connects it with no restart. Enable Track on it in
+   Preferences → MIDI, then any track can select it as MIDI input. Plugin sequencers/arps can drive other tracks.
+   Most likely stock MPC OS behaviour: MockbaMod's MidiLoop (`tkgl_anyctrl_lt.so`) only filters or blacklists
+   ports; it doesn't create them. Not yet confirmed on a stock unit. Drop the "(Mockba)" suffix from port names
+   for stock releases (it was only copied from addon naming). Latency is about one audio block (direct, unscheduled send).
