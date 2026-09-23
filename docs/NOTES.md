@@ -78,3 +78,21 @@ from the Force and may differ on MPC Live/One/X/Key (e.g. `Force Documents` vs `
   1280x628 plugin area. Several `qlinks` lines in one tab become nested pages that share the design but have
   different Q-Link sets. Values are MPC `Label` `Value` components (Titillium; the baked labels use the shadow font).
   Not yet seen on device.
+
+## Beyond synths: apps as plugins (analysis 2026-09-24, probe not yet run)
+
+A VST2 plugin is ordinary native code inside the MPC process, which has root, the network and the
+filesystem. force-shadow (LD_PRELOAD in the same process) already makes HTTP calls and writes files from there,
+so a plugin should be able to as well. `poc/netprobe.c` checks this on a device: DNS + HTTP, a file write into the
+documents folder, `posix_spawn` of `/bin/sh` and of a script on /sdcard (noexec check). Log: `/tmp/netprobe.log`.
+
+Rules for app-like plugins:
+- Never block the audio thread: network, disk and child processes go on a worker thread; audio goes through a ring buffer.
+- Spawn children with `posix_spawn` (vfork-style), not `fork()`: forking MPC's large, multithreaded,
+  real-time process copies its page tables (audio dropouts), and only async-signal-safe calls are allowed before exec.
+  The webstream/cratedigger core uses `fork()` in two places (yt-dlp daemon, ffmpeg pipe), so switch those.
+- A plugin crash takes MPC down with it, so risky parts (yt-dlp/Python, ffmpeg) belong in a child process.
+- UI is only the skin: parameters with display strings, static images, buttons. No text entry, no dynamic lists or
+  images. Dynamic text works through parameter display strings, e.g. "Result 1..8" slot params whose value text
+  is a track title, and filter enums for genre/style/decade.
+- Files the plugin writes appear in MPC's browser; the plugin can't tell MPC to load a program.
