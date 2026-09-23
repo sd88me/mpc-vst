@@ -79,7 +79,7 @@ from the Force and may differ on MPC Live/One/X/Key (e.g. `Force Documents` vs `
   different Q-Link sets. Values are MPC `Label` `Value` components (Titillium; the baked labels use the shadow font).
   Not yet seen on device.
 
-## Beyond synths: apps as plugins (analysis 2026-09-24, probe not yet run)
+## Beyond synths: apps as plugins (probe run on a Force 2026-09-24)
 
 A VST2 plugin is ordinary native code inside the MPC process, which has root, the network and the
 filesystem. force-shadow (LD_PRELOAD in the same process) already makes HTTP calls and writes files from there,
@@ -96,3 +96,11 @@ Rules for app-like plugins:
   images. Dynamic text works through parameter display strings, e.g. "Result 1..8" slot params whose value text
   is a track title, and filter enums for genre/style/decade.
 - Files the plugin writes appear in MPC's browser; the plugin can't tell MPC to load a program.
+
+Probe results (Force, MPC OS + MockbaMod, 2026-09-24): the plugin runs as **uid 0**. DNS + HTTP work
+(example.com 200; api.discogs.com answers 301 to HTTPS, so real APIs need TLS). Writing to
+`/sdcard/Force Documents/` works. `/sdcard` is ext4 mounted rw with exec allowed.
+**Spawning children:** `posix_spawn` itself works, but the child inherits MPC's environment, and on MockbaMod
+units that includes `LD_PRELOAD` of C++ libraries (mockbaMagic.so, tkgl_anyctrl_lt.so) that fail in a plain
+process ("undefined symbol _ZSt4cout", exit 127). Always spawn with a cleaned environment (drop LD_PRELOAD).
+Stock MPC OS has no such preload.
