@@ -56,5 +56,4 @@ from the Force and may differ on MPC Live/One/X/Key (e.g. `Force Documents` vs `
    new port, creates a matching input ("<client> <port>") and connects it with no restart. Enable Track on it in
    Preferences → MIDI, then any track can select it as MIDI input. Plugin sequencers/arps can drive other tracks.
    Most likely stock MPC OS behaviour: MockbaMod's MidiLoop (`tkgl_anyctrl_lt.so`) only filters or blacklists
-   ports; it doesn't create them. Not yet confirmed on a stock unit. Drop the "(Mockba)" suffix from port names
-   for stock releases (it was only copied from addon naming). Latency is about one audio block (direct, unscheduled send).
+   ports; it doesn't create them. Not yet confirmed on a stock unit. Latency is about one audio block (direct, unscheduled send).

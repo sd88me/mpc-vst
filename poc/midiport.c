@@ -1,5 +1,5 @@
 /* MIDI-port PoC: same sequencer as midiout.c, but MPC OS ignores a plugin's VST MIDI
-   output, so the notes go out an ALSA sequencer port ("MPC Plugin" / "Out (Mockba)")
+   output, so the notes go out an ALSA sequencer port ("MPC Plugin" / "MIDI Out")
    that tracks can pick as a MIDI input. Logs to /tmp/midiport.log. */
 #include <alsa/asoundlib.h>
 #include <stdint.h>
@@ -148,7 +148,7 @@ __attribute__((visibility("default"))) AEffect *VSTPluginMain(audioMasterCallbac
     LOG("VSTPluginMain\n");
     if (!seq && snd_seq_open(&seq, "default", SND_SEQ_OPEN_OUTPUT, 0) >= 0) {
         snd_seq_set_client_name(seq, "MPC Plugin");
-        seq_port = snd_seq_create_simple_port(seq, "Out (Mockba)",
+        seq_port = snd_seq_create_simple_port(seq, "MIDI Out",
             SND_SEQ_PORT_CAP_READ | SND_SEQ_PORT_CAP_SUBS_READ,
             SND_SEQ_PORT_TYPE_MIDI_GENERIC | SND_SEQ_PORT_TYPE_APPLICATION);
         LOG("alsa client %d port %d\n", snd_seq_client_id(seq), seq_port);
