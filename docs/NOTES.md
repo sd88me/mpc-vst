@@ -33,11 +33,17 @@ from the Force and may differ on MPC Live/One/X/Key (e.g. `Force Documents` vs `
 
 ## Open issues (from first Maze Voice test)
 
-1. **Enums render as knobs.** Labels are right. Next: use a `comboBox` (menu) for multi-option
+1. ~~Enums render as knobs.~~ Done: option params are radio groups of image `Button`s
+   (`buttonId` i of `numButtonsInGroup` N, all bound to the same parameter, option text drawn into our PNGs,
+   as in the stock Hype skin). A VST2 can't give MPC value lists, so `comboBox` menus open empty. Off/on params are toggle
+   buttons; `access:"write"` params are triggers (the wrapper sends `audioMasterAutomate` 0 after they fire).
+   Q-Link nudges step option params one option at a time (wrapper `setParameter`).
+   Original note: Labels are right. Next: use a `comboBox` (menu) for multi-option
    enums and a button type (`btnBypass`-style, 2 states) for on/off and momentary (`rnd_go`).
    Copy the definitions from Bassline's `localComponentDefinitions`, since they are local there, not
    in the generic library.
-2. **Some knobs on a page show blank** while their Q-Link works. Suspect: a missing `Label`
+2. ~~Some knobs show blank~~ Done: stock knobs only draw their value; names come from background
+   art. We add `Label` `"type": "Name"`. Original note: **Some knobs on a page show blank** while their Q-Link works. Suspect: a missing `Label`
    component (stock skins add Labels and `Focus` overlays), or knob bounds/`showWhenDataModelInvalid`.
    Compare the rendered page against Bassline's component set.
 3. Note timing is quantised to 128-frame DSP blocks (same as Move).
@@ -57,3 +63,13 @@ from the Force and may differ on MPC Live/One/X/Key (e.g. `Force Documents` vs `
    Preferences → MIDI, then any track can select it as MIDI input. Plugin sequencers/arps can drive other tracks.
    Most likely stock MPC OS behaviour: MockbaMod's MidiLoop (`tkgl_anyctrl_lt.so`) only filters or blacklists
    ports; it doesn't create them. Not yet confirmed on a stock unit. Latency is about one audio block (direct, unscheduled send).
+
+## Skin layout facts (verified 2026-09-23)
+
+- Nested pages: several `tabs` entries with the same `fnKeyIndex` and `fnKeySubIndex` 0,1,2…; Q-Link map
+  entries use `Tab` = fnKeyIndex+1, `SubTab` = fnKeySubIndex+1 (as in stock DrumSynthMulti).
+- Q-Link numbering: the 4x4 grid counts from the bottom row up (stock: top-left control = Q-Link 13). With
+  `Bank Direction: Column`, the Force's 8 knobs read bank 1 = Q-Links 13,9,5,1,14,10,6,2 and bank 2 = those +2.
+  `gen_vst.py` lays each page out as 2 rows of 8 (row = knob bank) and maps through that order.
+- Next: custom per-page geometry (grouped sections, bigger hero controls, artwork) like the stock plugins,
+  i.e. a hand-editable layout file per port instead of the fixed grid.

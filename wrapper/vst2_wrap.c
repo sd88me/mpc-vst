@@ -71,7 +71,7 @@ enum {
     effGetEffectName = 45, effGetVendorString = 47, effGetProductString = 48,
     effGetVendorVersion = 49, effCanDo = 51, effGetVstVersion = 58,
 };
-enum { audioMasterGetTime = 7, kVstTempoValid = 1 << 10 };
+enum { audioMasterAutomate = 0, audioMasterGetTime = 7, kVstTempoValid = 1 << 10 };
 enum { effFlagsCanReplacing = 1 << 4, effFlagsProgramChunks = 1 << 5, effFlagsIsSynth = 1 << 8 };
 
 /* ---- per-instance state ------------------------------------------------- */
@@ -82,6 +82,7 @@ typedef struct {
     int16_t block[DSP_BLOCK * 2];
     int pos;                 /* read position in block; DSP_BLOCK = empty */
     double bpm;
+    volatile char release[NPARAMS];  /* momentary params to report back to 0 */
     char chunk[8192];
 } wrap_t;
 
@@ -120,8 +121,23 @@ static void setParameter(AEffect *e, int32_t i, float n) {
     wrap_t *w = e->object;
     char buf[64];
     if (i < 0 || i >= NPARAMS) return;
-    norm_to_str(&PARAMS[i], n, buf, sizeof buf);
+    const param_t *p = &PARAMS[i];
+    if (p->nopts > 1) {
+        /* A value on an option (button press, preset, automation) selects it. A value
+         * between options is a Q-Link/encoder nudge from the current one: step one
+         * option that way, else small nudges round back and never change state. */
+        float pos = clamp01(n) * (p->nopts - 1);
+        if (fabsf(pos - roundf(pos)) > 0.001f) {
+            float cur = get_norm(w, i) * (p->nopts - 1);
+            int idx = (int)lroundf(cur) + (pos > cur ? 1 : -1);
+            if (idx < 0) idx = 0;
+            if (idx > p->nopts - 1) idx = p->nopts - 1;
+            n = (float)idx / (p->nopts - 1);
+        }
+    }
+    norm_to_str(p, n, buf, sizeof buf);
     g_api->set_param(w->dsp, PARAMS[i].key, buf);
+    if (PARAMS[i].momentary && n > 0.5f) w->release[i] = 1;
 }
 
 static float getParameter(AEffect *e, int32_t i) { return get_norm(e->object, i); }
@@ -141,6 +157,11 @@ static void processReplacing(AEffect *e, float **in, float **out, int32_t n) {
     wrap_t *w = e->object;
     (void)in;
     if (HAS_LFO_BPM) update_tempo(w);
+    /* A trigger param (e.g. Generate) fired: tell the host it is back to 0 so
+     * buttons bound to it drop their highlight. Done here, not inside
+     * setParameter, so the host is not re-entered from its own call. */
+    for (int i = 0; i < NPARAMS; i++)
+        if (w->release[i]) { w->release[i] = 0; w->master(&w->fx, audioMasterAutomate, i, 0, 0, 0.0f); }
     for (int32_t i = 0; i < n; i++) {
         if (w->pos >= DSP_BLOCK) {
             g_api->render_block(w->dsp, w->block, DSP_BLOCK);
