@@ -2,7 +2,7 @@
 """Generate the VST2 wrapper's params.h and the MPC native skin from module.json.
 
     vst/build/params.h                                  parameter table for vst2_wrap.c
-    vst/build/skin/<VENDOR> - VST - <NAME>/             copy to /sdcard/Synths/ on the Force
+    vst/build/skin/<VENDOR> - VST - <NAME>/             copy to /sdcard/Synths/ on the device
         version.xml
         Plugin Skins/TUI.json                           one page per TABS entry, 8 knobs each
         Plugin Skins/Q-Links.json                       Q-Link 1..8 -> the page's knobs
@@ -19,7 +19,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 NAME, VENDOR, UID, VERSION = "Maze Voice", "sd88me", "MzVc", 1000
 AKAI = "/usr/share/Akai/Content/Synths/"
 
-# Pages shown on the Force screen (and banked onto Q-Links 1..8), 8 keys max.
+# Pages shown on the device screen (and banked onto Q-Links 1..8), 8 keys max.
 TABS = [
     ("Osc", ["vco_tune", "mod_freq", "fm_depth", "fm_eg1", "vco_eg1", "mod_eg1", "vco_key", "mod_key"]),
     ("Mixer", ["vco_lvl", "mod_lvl", "noise_lvl", "noise_tone", "ring_lvl", "sat", "level", "out_mode"]),

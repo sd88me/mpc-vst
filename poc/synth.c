@@ -62,7 +62,7 @@ static intptr_t dispatcher(AEffect *e, int32_t op, int32_t idx, intptr_t v, void
     (void)e; (void)v;
     switch (op) {
     case effGetPlugCategory: return 2; /* synth */
-    case effGetEffectName: case effGetProductString: strcpy(p, "Force Synth PoC"); return 1;
+    case effGetEffectName: case effGetProductString: strcpy(p, "MPC Synth PoC"); return 1;
     case effGetVendorString: strcpy(p, "sd88me"); return 1;
     case effGetVendorVersion: return 1000;
     case effGetVstVersion: return 2400;

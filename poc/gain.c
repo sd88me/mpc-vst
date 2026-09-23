@@ -1,4 +1,4 @@
-/* Minimal VST2 stereo gain for the Force's built-in JUCE host (PoC). */
+/* Minimal VST2 stereo gain for the MPC OS built-in JUCE host (PoC). */
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
@@ -33,7 +33,7 @@ static intptr_t dispatcher(AEffect *e, int32_t op, int32_t idx, intptr_t v, void
     (void)e; (void)idx; (void)v; (void)o;
     switch (op) {
     case effGetPlugCategory: return 1;
-    case effGetEffectName: case effGetProductString: strcpy(p, "Force Gain PoC"); return 1;
+    case effGetEffectName: case effGetProductString: strcpy(p, "MPC Gain PoC"); return 1;
     case effGetVendorString: strcpy(p, "sd88me"); return 1;
     case effGetVendorVersion: return 1000;
     case effGetVstVersion: return 2400;

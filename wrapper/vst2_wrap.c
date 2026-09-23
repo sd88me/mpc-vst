@@ -1,10 +1,10 @@
 /* =============================================================================
  * vst2_wrap.c — expose a Schwung plugin_api_v2 DSP as a Linux VST2 plugin so
- * the Force's built-in MPC plugin host (JUCE) can load it as a native track
+ * the built-in plugin host (JUCE) of MPC OS standalone devices can load it as a native track
  * instrument. Generic: the DSP is linked in, and the generated params.h
  * (gen_vst.py, from module.json) supplies the parameter table and identity.
  *
- * Host contract (Force): 44100 Hz, 128-frame blocks — the same as the Move,
+ * Host contract (MPC OS standalone): 44100 Hz, 128-frame blocks — the same as the Move,
  * so the DSP runs unmodified. Audio is rendered in 128-frame chunks through a
  * small FIFO, so any host block size works; with 128-frame host blocks each
  * process() call renders exactly one DSP block and MIDI lands at its start.
