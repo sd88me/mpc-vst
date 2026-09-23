@@ -16,6 +16,7 @@ Layout file:
     slider_v cx= cy= w= h= label="..." key=<param>     (vertical slider; value text below)
     slider_h cx= cy= w= h= label="..." key=<param>     (horizontal slider; value text below)
     readout cx= cy= w= h= label="..." key=<param>      (live value text)
+    menu    cx= cy= w= h= label="..." key=<param>      (value text; tap opens MPC's native picker)
     stepper cx= cy= w= h= label="..." key=<param>      (live text; arrows = <param>_prev / <param>_next)
     list    x= y= w= h= cols= rows= th= gap= key=<p>   (rows = params <p>_1..<p>_N: text + tap)
     qlinks  "PAGE NAME" = key,key,...                  (optional, repeatable)
@@ -41,7 +42,7 @@ LCD, LINE, BTN_BG, BTN_TEXT, BOX = "1a120d", "2a2823", "", "fdf3ea", "1f1f1f"
 TD3 = False   # style=td3: frames are filled boxes, so widget crops sit on BOX, not the page bg
 FRAMES = 128               # filmstrip frames (stock strips: 128, numFrames 127)
 KNOB_QLINKS = [13, 9, 5, 1, 14, 10, 6, 2]
-CONTROL_KINDS = ("knob", "slider_v", "slider_h", "toggle", "button", "enum_h", "enum_v", "readout", "stepper", "list")
+CONTROL_KINDS = ("knob", "slider_v", "slider_h", "toggle", "button", "enum_h", "enum_v", "readout", "stepper", "list", "menu")
 THEME_KEYS = {"bg": "PLATE", "ink": "INK", "ink_dim": "INK_DIM", "accent": "ACCENT", "accent_hi": "ACCENT_HI",
               "seg_active": "SEG_ON", "seg_inactive": "SEG_OFF", "seg_active_tx": "SEG_ON_TX",
               "lcd": "LCD", "line": "LINE", "btn_bg": "BTN_BG", "btn_text": "BTN_TEXT", "box": "BOX"}
@@ -270,8 +271,9 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
         for w in tab["widgets"]:
             if w["kind"] == "frame":
                 script.append("frame|%d|%d|%d|%d|%s" % (w["x"], w["y"], w["w"], w["h"], w.get("title", "")))
-            elif w["kind"] in ("readout", "stepper"):
-                script.append("%s|%d|%d|%d|%d|%s" % (w["kind"], w["cx"], w["cy"], w["w"], w["h"], w.get("label") or "-"))
+            elif w["kind"] in ("readout", "stepper", "menu"):
+                script.append("%s|%d|%d|%d|%d|%s" % ("readout" if w["kind"] == "menu" else w["kind"],
+                                                     w["cx"], w["cy"], w["w"], w["h"], w.get("label") or "-"))
             elif w["kind"] == "list":
                 for (x, y, tw, th) in list_tiles(w):
                     script.append("tile|%d|%d|%d|%d|%s|%s|0" % (x, y, tw, th, LCD, LINE))
@@ -346,6 +348,14 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                                   "handleName": "Data"}, _bounds((cw - sq) // 2, 0, sq, sq), "Slider"),
                     _value_label(0, (sq - sh_) // 2 + sh_ + 27, cw, 26, 22.0, INK_DIM)]))
                 kids.append(_placed(key, name, i, w["cx"] - cw // 2, w["cy"] - sq // 2, cw, ch))
+            elif kind == "menu":
+                x, y, rw, rh = w["cx"] - w["w"] // 2, w["cy"] - w["h"] // 2, w["w"], w["h"]
+                key = "shMenu_%dx%d" % (rw, rh)
+                overlay = [_action("Mouse Down", "Show Overlay", "menu overlay"),
+                           _action("Double Click", "Show Overlay", "menu overlay"),
+                           _action("Enter Pressed", "Show Overlay", "menu overlay")]
+                defs.setdefault(key, _local(key, overlay, [_focus(rw, rh), _value_label(8, 0, rw - 16, rh, 26.0, ACCENT)]))
+                kids.append(_placed(key, name, i, x, y, rw, rh))
             elif kind == "readout":
                 x, y, rw, rh = w["cx"] - w["w"] // 2, w["cy"] - w["h"] // 2, w["w"], w["h"]
                 key = "shReadout_%dx%d" % (rw, rh)
@@ -372,7 +382,8 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                         script += ["clear|" + under(), "tile|%d|%d|%d|%d|%s|%s|%d" % (x, y, tw, th, LCD, SEG_ON if border else LINE, border),
                                    "crop|%s|%d|%d|%d|%d" % (art("%s_%s" % (img, state)), x, y, tw, th)]
                     key = "shRow_%dx%d" % (tw, th)
-                    defs.setdefault(key, _local(key, [_action("Mouse Down", "Q-Link"), _action("Enter Pressed", "Toggle Switch")],
+                    # the Value label lies over the button and takes the touch, so the row itself toggles on touch
+                    defs.setdefault(key, _local(key, [_action("Mouse Down", "Toggle Switch"), _action("Enter Pressed", "Toggle Switch")],
                                                 [_focus(tw, th), _button(img + "_on.png", img + "_off.png", 1, 1, tw, th),
                                                  _value_label(12, 0, tw - 24, th, 24.0, ACCENT, "left verticallyCentred")]))
                     kids.append(_placed(key, "%s %d" % (name, slot + 1), index[sk], x, y, tw, th, focus="Yes" if slot == 0 else "No"))
@@ -452,7 +463,7 @@ def qlink_bounds(tab, keys):
             xs += [w["cx"] - max(65, w["w"] // 2), w["cx"] + max(65, w["w"] // 2)]
             ys += [w["cy"] - w["h"] // 2, w["cy"] + w["h"] // 2 + 56]
             continue
-        if w["kind"] in ("readout", "stepper"):
+        if w["kind"] in ("readout", "stepper", "menu"):
             xs += [w["cx"] - w["w"] // 2, w["cx"] + w["w"] // 2]
             ys += [w["cy"] - w["h"] // 2 - 26, w["cy"] + w["h"] // 2]
             continue
