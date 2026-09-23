@@ -63,7 +63,10 @@ for spec in a.extra:
     if not dest.startswith("vst/"):
         raise SystemExit("--extra DEST must be under vst/")
     d = os.path.join(root, "payload", dest)
-    (shutil.copytree if os.path.isdir(src) else shutil.copy2)(src, d)
+    if os.path.isdir(src):
+        shutil.copytree(src, d, symlinks=True)
+    else:
+        shutil.copy2(src, d)
     extras.append(dest[4:])
 open(os.path.join(root, "plugin.xml"), "w").write(entry + "\n")
 shutil.copy2(os.path.join(HERE, "release", "plugin_list.awk"), root)
@@ -141,23 +144,33 @@ See `SHA256SUMS`. Made with [mpc-vst-plugins](https://github.com/sd88me/mpc-vst-
            where="Instrument plugins" if kind == "instrument" else "Insert effects")
 open(os.path.join(root, "INSTALL.md"), "w").write(install_md)
 
+def walk(top):
+    """Every file and symlink under top (symlinks, including ones to directories, are not followed)."""
+    for d, dirs, files in os.walk(top):
+        dirs.sort()
+        for f in sorted(files + [x for x in dirs if os.path.islink(os.path.join(d, x))]):
+            yield os.path.join(d, f)
+
+
 sums = []
-for d, _, files in sorted(os.walk(root)):
-    for f in sorted(files):
-        p = os.path.join(d, f)
-        rel = os.path.relpath(p, root)
-        sums.append("%s  %s" % (hashlib.sha256(open(p, "rb").read()).hexdigest(), rel))
+for p in walk(root):
+    if not os.path.islink(p):
+        sums.append("%s  %s" % (hashlib.sha256(open(p, "rb").read()).hexdigest(), os.path.relpath(p, root)))
 open(os.path.join(root, "SHA256SUMS"), "w").write("\n".join(sums) + "\n")
 
 os.makedirs(a.out, exist_ok=True)
 zpath = os.path.join(a.out, top + "-mpc-armv7.zip")
 with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
-    for d, _, files in sorted(os.walk(root)):
-        for f in sorted(files):
-            p = os.path.join(d, f)
-            info = zipfile.ZipInfo.from_file(p, os.path.relpath(p, stage))
+    for p in walk(root):
+        info = zipfile.ZipInfo(os.path.relpath(p, stage), date_time=(2026, 1, 1, 0, 0, 0))
+        info.create_system = 3   # unix, so modes and symlinks survive
+        if os.path.islink(p):
+            info.external_attr = (stat.S_IFLNK | 0o777) << 16
+            z.writestr(info, os.readlink(p))
+        else:
             info.compress_type = zipfile.ZIP_DEFLATED
-            info.external_attr = (0o755 if os.stat(p).st_mode & stat.S_IXUSR else 0o644) << 16
-            z.writestr(info, open(p, "rb").read())
+            info.external_attr = (stat.S_IFREG | (0o755 if os.stat(p).st_mode & stat.S_IXUSR else 0o644)) << 16
+            with open(p, "rb") as f:
+                z.writestr(info, f.read())
 shutil.rmtree(stage)
 print("%s (%d files, %.1f MB)" % (zpath, len(sums) + 1, os.path.getsize(zpath) / 1e6))

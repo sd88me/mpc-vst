@@ -33,7 +33,7 @@ pidof MPC >/dev/null && die "MPC did not stop"
 mkdir -p "$SO_DIR" /sdcard/Synths
 cp payload/vst/"$SO" "$SO_DIR/$SO.new" && mv "$SO_DIR/$SO.new" "$SO_DIR/$SO"
 for e in @EXTRAS@; do
-    rm -rf "$SO_DIR/$e.new"; cp -a payload/vst/"$e" "$SO_DIR/$e.new"; rm -rf "$SO_DIR/$e"; mv "$SO_DIR/$e.new" "$SO_DIR/$e"
+    mkdir -p "$(dirname "$SO_DIR/$e")"; rm -rf "$SO_DIR/$e.new"; cp -a payload/vst/"$e" "$SO_DIR/$e.new"; rm -rf "$SO_DIR/$e"; mv "$SO_DIR/$e.new" "$SO_DIR/$e"
 done
 rm -rf "/sdcard/Synths/$SKIN"; cp -a "payload/Synths/$SKIN" "/sdcard/Synths/$SKIN"
 

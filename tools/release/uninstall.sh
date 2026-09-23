@@ -33,7 +33,7 @@ fi
 mv "$SETTINGS.new" "$SETTINGS"
 
 rm -f "$SO_DIR/$SO"
-for e in @EXTRAS@; do rm -rf "$SO_DIR/$e"; done
+for e in @EXTRAS@; do rm -rf "$SO_DIR/$e"; rmdir "$(dirname "$SO_DIR/$e")" 2>/dev/null || true; done
 rm -rf "/sdcard/Synths/$SKIN"
 sync
 echo "Removed $NAME. Settings backup: $BAK"
