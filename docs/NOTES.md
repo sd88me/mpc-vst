@@ -45,8 +45,10 @@ from the Force and may differ on MPC Live/One/X/Key (e.g. `Force Documents` vs `
    `vst.json` next to `module.json` so any Schwung module (force-acid, …) ports with no code.
 5. Maze's knob-touch note filter (notes 0..9) is compiled out with `-DMAZE_VST=1`, which is built but
    **not yet deployed** (md5 b10668a4…).
-6. **MIDI-output plugins (sequencers/arps): untested.** The `MPC` binary contains the JUCE VST host strings
-   `sendVstEvents` / `sendVstMidiEvent` (the canDo queries for plugin MIDI out), so the host side exists.
-   Unknown: whether MPC OS routes a plugin's MIDI output anywhere (to its own track, other tracks, MIDI out).
-   Test: a PoC plugin that answers canDo `sendVstMidiEvent`, uses `audioMasterGetTime` `ppqPos` for sync,
-   and emits notes via `audioMasterProcessEvents` (opcode 8); put it on a track that feeds a synth.
+6. **MIDI-output plugins: MPC OS ignores plugin MIDI out** (tested 2026-09-23 with `poc/midiout.c`).
+   MPC never asks canDo `sendVstEvents`/`sendVstMidiEvent` (only `receiveVstMidiEvent`, `bypass`);
+   `audioMasterProcessEvents` is accepted silently and the events go nowhere. A plugin can't be picked as
+   a MIDI input on another track, and the track's "MIDI send to" only forwards the notes coming *into* it.
+   Transport/tempo via `audioMasterGetTime` do work (flags 0x7fc4, tempo and ppqPos valid), and so does MIDI in.
+   Next idea: a sequencer plugin that syncs to ppqPos but emits notes to an ALSA virtual MIDI port
+   (as the MockbaMod addons do) that tracks select as MIDI input. Untested.
