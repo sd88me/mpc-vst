@@ -1,0 +1,46 @@
+# Notes: native VST2 plugins on the Force
+
+Origin: mpc-forums thread "Proof of Concept: Custom Standalone Plugins"
+(viewtopic.php?f=48&t=220981, Sep 2026). Verified on a Force running MockbaMod, 2026-09-23.
+
+## Facts (verified)
+
+- `/usr/bin/MPC` contains `"pluginList"` + `"-arm"`, `KNOWNPLUGINS`, `VSTPluginMain`.
+- Settings: `/media/az01-internal/Settings/MPC/MPC.settings`. Edit **with `acvs`
+  stopped**; back it up first (malformed XML ⇒ MPC resets it to defaults).
+- Entry format:
+  `<PLUGIN name="X" descriptiveName="X" format="VST" category="Synth|Effect" manufacturer="V"
+  version="1.0" file="/sdcard/vst/x.so" uid="<hex uniqueID>" isInstrument="0|1" fileTime="0"
+  infoUpdateTime="0" numInputs="2" numOutputs="2" isShell="0"/>`
+- Device: armv7l, glibc 2.39 (build with an older glibc, e.g. `arm32v7/gcc:12` docker = 2.36).
+- Audio: 44100 Hz, 128-frame period, which is identical to the Move/Schwung, so DSP runs unmodified.
+- AEffect magic must be `'VstP'` (0x56737450). **The forum snippet's magic is wrong.**
+- Instruments: set `effFlagsIsSynth`, category 2, answer `effCanDo "receiveVstEvents"`;
+  MIDI arrives via `effProcessEvents`.
+- Tempo: `audioMasterGetTime` with `kVstTempoValid` works for synced LFOs.
+- State: `effFlagsProgramChunks` + `effGetChunk`/`effSetChunk`.
+- Skin search path is `SynthContentLocations` in MPC.settings; `/sdcard/Synths` is one of them
+  (also `/media/662522/Synths`, `/usr/share/Akai/Content/Synths`).
+- Skin folder name `<manufacturer> - VST - <plugin name>` matched. Reference skins:
+  `/usr/share/Akai/Content/Synths/*/Plugin Skins/` (e.g. Decimator = simple, Bassline = 4 tabs,
+  knobs + `btnBypass` + `slider` + `comboBox` + `Label` + `Focus`).
+- `importFiles` in `TUI.json` resolve relative to the skin; use absolute
+  `/usr/share/Akai/Content/Synths/...` paths when the skin lives elsewhere.
+- Component library: `AKAI Components/AKAI Generic Components.json` (knobBlack/Blue/Green/Grip/
+  Point/Red/Silver/Witch/Yellow). Bassline defines its own `btnBypass`, `comboBox`, `slider` locally;
+  that's where to copy switch/button/menu definitions from.
+
+## Open issues (from first Maze Voice test)
+
+1. **Enums render as knobs.** Labels are right. Next: use a `comboBox` (menu) for multi-option
+   enums and a button type (`btnBypass`-style, 2 states) for on/off and momentary (`rnd_go`).
+   Copy the definitions from Bassline's `localComponentDefinitions`, since they are local there, not
+   in the generic library.
+2. **Some knobs on a page show blank** while their Q-Link works. Suspect: a missing `Label`
+   component (stock skins add Labels and `Focus` overlays), or knob bounds/`showWhenDataModelInvalid`.
+   Compare the rendered page against Bassline's component set.
+3. Note timing is quantised to 128-frame DSP blocks (same as Move).
+4. `gen_vst.py` is Maze-specific (NAME/UID/TABS at the top). Next: read those from a small per-port
+   `vst.json` next to `module.json` so any Schwung module (force-acid, …) ports with no code.
+5. Maze's knob-touch note filter (notes 0..9) is compiled out with `-DMAZE_VST=1`, which is built but
+   **not yet deployed** (md5 b10668a4…).
