@@ -105,3 +105,10 @@ units that includes `LD_PRELOAD` of C++ libraries (mockbaMagic.so, tkgl_anyctrl_
 process ("undefined symbol _ZSt4cout", exit 127). Always spawn with a cleaned environment (drop LD_PRELOAD).
 Stock MPC OS has no such preload.
 - HTTPS: MPC OS ships `/usr/lib/libcurl.so.4` (8.x), `libssl.so.3` and `libcrypto.so.3`, so a plugin can `dlopen("libcurl.so.4")` for HTTPS without bundling TLS.
+
+## Dynamic text in skins (verified on a Force, 2026-09-24, `poc/textprobe.c`)
+MPC polls parameter **value text** (`effGetParamDisplay`) by itself: a counter the plugin changes with no
+notification at all ticks live on a `Label` `Value`. Parameter **names** (`Label` `Name`) also update live when the
+plugin calls `audioMasterUpdateDisplay` (opcode 42). So readouts (status, time, now playing), filter names and
+result lists can be plain parameters whose display text the plugin changes. Name changes without
+UpdateDisplay are untested; call it whenever a name changes.
