@@ -19,6 +19,7 @@
  *   readout|cx|cy|w|h|LABEL           readout box + label, no text (MPC draws the live value)
  *   stepper|cx|cy|w|h|LABEL           < box > stepper + label, no text
  *   tile|x|y|w|h|FILL|BORDER|bw       list tile: fill, then a border of bw px (0 = the plate-line rules)
+ *   sstrip|out.ppm|w|h|frames|v|RRGGBB  slider filmstrip (frames x w*h, stacked vertically); v=1 vertical
  */
 #define main render_conf_preview_main
 #include "render_conf_preview.c"
@@ -77,6 +78,35 @@ static void strip(const char *path, int r, int frames, uint32_t bg) {
     fclose(f);
 }
 
+/* Slider in the knob's palette: dark well, accent fill up to the value, knob-face thumb. */
+static void slider_body(int x, int y, int w, int h, int vert, double t) {
+    fill_rr(x, y, w, h, (vert ? w : h) / 2, 0x050403);
+    int pad = 4, th = vert ? w - 2 * pad : h - 2 * pad;           /* thumb size */
+    if (vert) {
+        int travel = h - 2 * pad - th, ty = y + pad + (int)lround((1.0 - t) * travel);
+        fill_rr(x + pad + (w - 2 * pad) / 2 - 3, ty + th / 2, 6, y + h - pad - (ty + th / 2), 3, KNOB_DOT_COLOR);
+        fill_circle(x + w / 2, ty + th / 2, th / 2, KNOB_FACE);
+        draw_ring(x + w / 2, ty + th / 2, th / 2 + 1, 2, KNOB_RING);
+    } else {
+        int travel = w - 2 * pad - th, tx = x + pad + (int)lround(t * travel);
+        fill_rr(x + pad, y + h / 2 - 3, tx + th / 2 - (x + pad), 6, 3, KNOB_DOT_COLOR);
+        fill_circle(tx + th / 2, y + h / 2, th / 2, KNOB_FACE);
+        draw_ring(tx + th / 2, y + h / 2, th / 2 + 1, 2, KNOB_RING);
+    }
+}
+
+static void sstrip(const char *path, int w, int h, int frames, int vert, uint32_t bg) {
+    FILE *f = fopen(path, "wb");
+    if (!f) { perror(path); exit(1); }
+    fprintf(f, "P6\n%d %d\n255\n", w, h * frames);
+    for (int k = 0; k < frames; k++) {
+        fill_rect(0, 0, w + 4, h + 4, bg);
+        slider_body(0, 0, w, h, vert, (double)k / (frames - 1));
+        write_region(f, 0, 0, w, h);
+    }
+    fclose(f);
+}
+
 #define HEX(s) ((uint32_t)strtoul((s), NULL, 16))
 
 int main(void) {
@@ -112,6 +142,7 @@ int main(void) {
             }
         }
         else if (!strcmp(op, "crop") && n == 6) crop(a[1], atoi(a[2]), atoi(a[3]), atoi(a[4]), atoi(a[5]));
+        else if (!strcmp(op, "sstrip") && n == 7) sstrip(a[1], atoi(a[2]), atoi(a[3]), atoi(a[4]), atoi(a[5]), HEX(a[6]));
         else if (!strcmp(op, "strip") && n == 5) strip(a[1], atoi(a[2]), atoi(a[3]), HEX(a[4]));
         else { fprintf(stderr, "shadow_art: bad command: %s (%d fields)\n", op, n); return 1; }
     }

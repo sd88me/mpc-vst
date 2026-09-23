@@ -233,7 +233,7 @@ def shape_for(w):
         return "circle", dict(cx=w["cx"], cy=w["cy"] - Y_OFF, r=w["r"])
     if k == "list":
         return "rect", dict(x=w["x"], y=w["y"] - Y_OFF, width=w["w"], height=w["h"])
-    if k in ("readout", "stepper"):
+    if k in ("readout", "stepper", "slider_v", "slider_h"):
         return "rect", dict(x=w["cx"] - w["w"] / 2, y=w["cy"] - w["h"] / 2 - Y_OFF, width=w["w"], height=w["h"])
     if k == "toggle":
         return "rect", dict(x=w["cx"] - 25.5, y=w["cy"] - 13.5 - Y_OFF, width=51, height=27)
@@ -366,7 +366,7 @@ def element_to_line(label, geo):
                 w[k] = int(w.get(k, {"rows": 4, "cols": 1, "gap": 4}[k]))
     elif kind == "knob":
         w.update(cx=round(cx), cy=round(cy + Y), r=max(12, round(gw / 2)))
-    elif kind in ("readout", "stepper"):
+    elif kind in ("readout", "stepper", "slider_v", "slider_h"):
         w.update(cx=round(cx), cy=round(cy + Y), w=round(gw), h=round(gh))
     elif kind == "enum_h":
         w.update(cx=round(cx), cy=round(cy + Y))
@@ -444,9 +444,10 @@ def preview(skin_dir, out_pattern, frame=40):
                 sd = s["componentData"]
                 sx, sy, sw, sh = xywh(s["bounds"])
                 if sd["type"] == "Knob":
-                    st = Image.open(os.path.join(skin_dir, sd["data"]["filmStrip"])).convert("RGB")
+                    st = Image.open(os.path.join(skin_dir, sd["data"]["filmStrip"])).convert("RGBA")
                     fw = st.size[0]
-                    im.paste(st.crop((0, frame * fw, fw, (frame + 1) * fw)), (x + sx, y + sy))
+                    fr = st.crop((0, frame * fw, fw, (frame + 1) * fw))
+                    im.paste(fr, (x + sx, y + sy), fr)
                 elif sd["type"] == "Button":
                     img = sd["data"]["offImage"]
                     if img:

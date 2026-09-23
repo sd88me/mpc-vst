@@ -13,10 +13,13 @@ Layout file:
     button  cx= cy= label="..." key=<param>          (trigger)
     enum_h  cx= cy= label="..." key=<param> [options="A,B,.."] [sw=<px>] [rows=<n>]
     enum_v  cx= cy= label="..." key=<param> [options="A,B,.."]   (options default to the param's)
+    slider_v cx= cy= w= h= label="..." key=<param>     (vertical slider; value text below)
+    slider_h cx= cy= w= h= label="..." key=<param>     (horizontal slider; value text below)
     readout cx= cy= w= h= label="..." key=<param>      (live value text)
     stepper cx= cy= w= h= label="..." key=<param>      (live text; arrows = <param>_prev / <param>_next)
     list    x= y= w= h= cols= rows= th= gap= key=<p>   (rows = params <p>_1..<p>_N: text + tap)
     qlinks  "PAGE NAME" = key,key,...                  (optional, repeatable)
+Top level: `qlinks_track = key,...` sets the Q-Links used outside page-follow mode (default: page 1's).
 Top-level `style=` / `theme_<name>=RRGGBB` lines are the shadow_page.conf ones; `color=` on a
 button overrides its fill.
 
@@ -38,7 +41,7 @@ LCD, LINE, BTN_BG, BTN_TEXT, BOX = "1a120d", "2a2823", "", "fdf3ea", "1f1f1f"
 TD3 = False   # style=td3: frames are filled boxes, so widget crops sit on BOX, not the page bg
 FRAMES = 128               # filmstrip frames (stock strips: 128, numFrames 127)
 KNOB_QLINKS = [13, 9, 5, 1, 14, 10, 6, 2]
-CONTROL_KINDS = ("knob", "toggle", "button", "enum_h", "enum_v", "readout", "stepper", "list")
+CONTROL_KINDS = ("knob", "slider_v", "slider_h", "toggle", "button", "enum_h", "enum_v", "readout", "stepper", "list")
 THEME_KEYS = {"bg": "PLATE", "ink": "INK", "ink_dim": "INK_DIM", "accent": "ACCENT", "accent_hi": "ACCENT_HI",
               "seg_active": "SEG_ON", "seg_inactive": "SEG_OFF", "seg_active_tx": "SEG_ON_TX",
               "lcd": "LCD", "line": "LINE", "btn_bg": "BTN_BG", "btn_text": "BTN_TEXT", "box": "BOX"}
@@ -55,12 +58,15 @@ def parse_layout(path):
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
-        if not tabs and "=" in line and not line.startswith("["):
+        if not tabs and "=" in line and not line.startswith("[") and not line.startswith("qlinks_track"):
             top.append(line)
             continue
         m = re.match(r"\[tab (.+)\]$", line)
         if m:
             tabs.append({"name": m.group(1).strip(), "widgets": [], "qlinks": []})
+            continue
+        if line.startswith("qlinks_track"):
+            top.append(line)
             continue
         if line.startswith("qlinks"):
             m = re.match(r'qlinks\s+"([^"]+)"\s*=\s*(.+)$', line)
@@ -151,6 +157,8 @@ def label_cmds(w):
         return ["text|%d|%d|1.5|%s|%s" % (w["cx"], w["cy"] + w["r"] + 12, INK, lab)]
     if k == "toggle":
         return ["text|%d|%d|1.5|%s|%s" % (w["cx"], w["cy"] + 13 + 10, INK, lab)]
+    if k in ("slider_v", "slider_h"):
+        return ["text|%d|%d|1.5|%s|%s" % (w["cx"], w["cy"] + w["h"] // 2 + 10, INK, lab)]
     if k == "enum_h":
         return ["text|%d|%d|1.5|%s|%s" % (w["cx"], w["cy"] - 33 // 2 - 22, INK, lab)]
     if k == "enum_v":
@@ -226,7 +234,7 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
     os.makedirs(work, exist_ok=True)
     script, defs, pages, qmap, ppms = [], {}, [], [], []
     theme_conf = os.path.join(work, "theme.conf")
-    open(theme_conf, "w").write("\n".join(top) + "\n")
+    open(theme_conf, "w").write("\n".join(l for l in top if not l.startswith("qlinks_track")) + "\n")
     script.append("theme|" + theme_conf)
 
     def art(name):
@@ -234,7 +242,7 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
         ppms.append((ppm, os.path.join(skin_dir, name + ".png")))
         return ppm
 
-    radii = set()
+    radii, sliders = set(), set()
     for t, tab in enumerate(tabs_in):
         kids, controls = [], []
         for w in tab["widgets"]:
@@ -319,6 +327,25 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                 defs[key] = _local(key, [_action("Mouse Down", "Q-Link"), _action("Enter Pressed", "Toggle Switch")],
                                    [_focus(bw, bh), _button(img + "_on.png", img + "_off.png", 1, 1, bw, bh)])
                 kids.append(_placed(key, name, i, x, y, bw, bh))
+            elif kind in ("slider_v", "slider_h"):
+                sw_, sh_ = w["w"], w["h"]
+                vert = kind == "slider_v"
+                img = "sh_%s_%dx%d" % (kind, sw_, sh_)
+                sliders.add((img, sw_, sh_, vert))
+                sq = max(sw_, sh_)   # filmstrip frames are square (as stock); padding is transparent
+                cw = max(130, sq)
+                ch = (sq - sh_) // 2 + sh_ + 27 + 26
+                key = "shSlider_%s_%dx%d" % ("v" if vert else "h", sw_, sh_)
+                defs.setdefault(key, _local(key, [_action("Mouse Down", "Q-Link"),
+                                                  _action("Double Click", "Show Overlay", "knob overlay"),
+                                                  _action("Enter Pressed", "Show Overlay", "knob overlay")], [
+                    _focus(cw, ch),
+                    _sub("Knob", {"version": 5, "knobType": "FilmStrip", "filmStrip": img + ".png",
+                                  "numFrames": FRAMES - 1, "invert": False,
+                                  "dragOrientation": "Vertical" if vert else "Horizontal",
+                                  "handleName": "Data"}, _bounds((cw - sq) // 2, 0, sq, sq), "Slider"),
+                    _value_label(0, (sq - sh_) // 2 + sh_ + 27, cw, 26, 22.0, INK_DIM)]))
+                kids.append(_placed(key, name, i, w["cx"] - cw // 2, w["cy"] - sq // 2, cw, ch))
             elif kind == "readout":
                 x, y, rw, rh = w["cx"] - w["w"] // 2, w["cy"] - w["h"] // 2, w["w"], w["h"]
                 key = "shReadout_%dx%d" % (rw, rh)
@@ -383,15 +410,30 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                 "ignoreMousePresses": False, "disableCoarseDataWheel": False, "repeats": 1,
                 "hideQLinkBounds": False, "componentsData": kids}}
 
+    for img, sw_, sh_, vert in sorted(sliders):
+        script.append("sstrip|%s|%d|%d|%d|%d|%s" % (art(img), sw_, sh_, FRAMES, 1 if vert else 0, under()))
     for r in sorted(radii):
         script.append("strip|%s|%d|%d|%s" % (art("sh_knob_r%d" % r), r, FRAMES, under()))
     subprocess.run([art_bin], input="\n".join(script) + "\n", text=True, check=True)
     for ppm, png in ppms:
         png_from_ppm(ppm, png)
+    for img, sw_, sh_, vert in sliders:
+        square_strip(os.path.join(skin_dir, img + ".png"), sw_, sh_)
     for f in os.listdir(work):
         os.remove(os.path.join(work, f))
     os.rmdir(work)
     return list(defs.values()), pages, qmap
+
+
+def square_strip(path, w, h):
+    """w x h frames -> square max(w,h) frames with the slider centred and transparent padding."""
+    from PIL import Image
+    src = Image.open(path).convert("RGBA")
+    n, sq = src.size[1] // h, max(w, h)
+    out = Image.new("RGBA", (sq, sq * n), (0, 0, 0, 0))
+    for k in range(n):
+        out.paste(src.crop((0, k * h, w, (k + 1) * h)), ((sq - w) // 2, k * sq + (sq - h) // 2))
+    out.save(path)
 
 
 def qlink_bounds(tab, keys):
@@ -405,6 +447,10 @@ def qlink_bounds(tab, keys):
                     ys += [y, y + th]
             continue
         if w.get("key") not in keys:
+            continue
+        if w["kind"] in ("slider_v", "slider_h"):
+            xs += [w["cx"] - max(65, w["w"] // 2), w["cx"] + max(65, w["w"] // 2)]
+            ys += [w["cy"] - w["h"] // 2, w["cy"] + w["h"] // 2 + 56]
             continue
         if w["kind"] in ("readout", "stepper"):
             xs += [w["cx"] - w["w"] // 2, w["cx"] + w["w"] // 2]
@@ -432,6 +478,24 @@ def qlink_bounds(tab, keys):
 AKAI = "/usr/share/Akai/Content/Synths/"
 
 
+def program_qlinks(layout_path, params, qmap):
+    """Q-Links outside page-follow (screen) mode: `qlinks_track = key,...` at the top of the layout
+    (up to 16, same bank order as pages), else the first page's set."""
+    index = {p["key"]: i for i, p in enumerate(params)}
+    for line in parse_layout(layout_path)[1]:
+        if line.startswith("qlinks_track"):
+            keys = [k.strip() for k in line.split("=", 1)[1].split(",") if k.strip()]
+            if len(keys) > 16:
+                raise SystemExit("layout: qlinks_track has %d keys (max 16)" % len(keys))
+            ql = {"Q-Link %d" % (q + 1): -1 for q in range(16)}
+            for s_, k in enumerate(keys):
+                if k not in index:
+                    raise SystemExit("layout: qlinks_track key %r is not a parameter" % k)
+                ql["Q-Link %d" % qlink_for_slot(s_)] = index[k]
+            return ql
+    return dict(qmap[0]["Q-Links"])
+
+
 def write_skin(outdir, vendor, name, layout_path, params, art_bin):
     """Build the whole skin folder <outdir>/<vendor> - VST - <name>/ from a layout. Needs Pillow."""
     import json
@@ -449,7 +513,7 @@ def write_skin(outdir, vendor, name, layout_path, params, art_bin):
         "tabs": tabs}}
     qlinks = {"version": 4, "info": {"version": 1, "type": "CompleteDescription"},
               "Screen Mode Q-Links": {"version": 4, "map": qmap},
-              "Program Mode Q-Links": dict(qmap[0]["Q-Links"])}
+              "Program Mode Q-Links": program_qlinks(layout_path, params, qmap)}
     open(os.path.join(d, "version.xml"), "w").write(
         "<?xml version='1.0' encoding='utf-8'?>\n<plugincontent version=\"1.0\">\n"
         "\t<identifier>%s.vst.%s</identifier>\n\t<version>1.0.0.0</version>\n</plugincontent>\n"

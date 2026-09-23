@@ -35,7 +35,7 @@ The tools need Python 3; the skin build and preview also need Pillow (the ports 
   layout line without coordinates, e.g. `knob key=cutoff label="CUTOFF"`. Move, resize, duplicate or delete
   it; the converter reads the position and size from the circle or rect inside.
 - To add a control, copy one from `tools/skin_template.svg` (one of every kind) and change its label.
-- Knob size = circle radius. Readout/stepper/list size = rect size. Horizontal-segment width = rect
+- Knob size = circle radius. Slider/readout/stepper/list size = rect size (`slider_v` / `slider_h`). Horizontal-segment width = rect
   width ÷ options per row. Toggles, buttons and vertical selectors use only the centre (their size
   is fixed by the renderer).
 - Q-Link sets live in the layer's **description** (`qlinks "PAGE" = key,...`, one line per nested page).
@@ -43,6 +43,14 @@ The tools need Python 3; the skin build and preview also need Pillow (the ports 
   background artwork is the next step (browser-rendered art, see below).
 - `to-svg` → `from-svg` without edits reproduces the layout exactly (verified on Maze Voice: identical
   `TUI.json`, Q-Links and every image).
+
+## Q-Links
+MPC reads two maps from the skin's `Q-Links.json`:
+- **Screen mode** (Q-Links follow the page on screen): one map per page. In the layout, each `qlinks "PAGE" =
+  key,...` line in a tab gives that page's set, in order: keys 1–8 on knob bank 1, 9–16 on bank 2 (converted to
+  MPC's bottom-up grid numbering for you). Without a `qlinks` line, a tab uses its first 16 controls in file order.
+- **Program/track mode** (Q-Links fixed to the track or program, whatever page is showing): one map. Set it with a
+  top-level `qlinks_track = key,...` line (same ordering); without it, page 1's set is used.
 
 ## Coming next
 - Background artwork from the SVG: anything you draw in Inkscape becomes the page's background image.
