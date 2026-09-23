@@ -32,6 +32,11 @@ See [docs/NOTES.md](docs/NOTES.md) for details, gotchas, and open issues.
   it with any Schwung DSP plus a generated `params.h`.
 - `tools/gen_vst.py`: generates `params.h`, the skin, and the `pluginList` entry from
   a Schwung `module.json` (currently configured for Maze Voice; see TODO).
+- `tools/shadow_skin.py` + `tools/shadow_art.c`: build a skin from a Force Shadow style layout
+  (`shadow_page.conf` widget syntax: frames, knobs, toggles, triggers, option segments, plus
+  `qlinks` lines for nested pages). The artwork (backgrounds, knob filmstrips, button states) is drawn by
+  [force-shadow](https://github.com/sd88me/force-shadow)'s own renderer, so the MPC page matches the
+  shadow page pixel for pixel. Needs a force-shadow checkout to build `shadow_art`.
 - `tools/host_test.c`: an offline x86 host test (instances, params, MIDI→audio, chunks).
 - `poc/gain.c`, `poc/synth.c`: minimal effect / instrument examples.
 - `poc/midiport.c`: a MIDI-generating plugin (tempo-synced) that drives other tracks through an ALSA port

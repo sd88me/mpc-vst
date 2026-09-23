@@ -71,5 +71,10 @@ from the Force and may differ on MPC Live/One/X/Key (e.g. `Force Documents` vs `
 - Q-Link numbering: the 4x4 grid counts from the bottom row up (stock: top-left control = Q-Link 13). With
   `Bank Direction: Column`, the Force's 8 knobs read bank 1 = Q-Links 13,9,5,1,14,10,6,2 and bank 2 = those +2.
   `gen_vst.py` lays each page out as 2 rows of 8 (row = knob bank) and maps through that order.
-- Next: custom per-page geometry (grouped sections, bigger hero controls, artwork) like the stock plugins,
-  i.e. a hand-editable layout file per port instead of the fixed grid.
+- Custom geometry (2026-09-23): `tools/shadow_skin.py` takes a Force Shadow style layout file per port
+  (Maze: `force-maze/maze-voice/vst/layout.conf`) and emits `TUI.json` with free placement, a per-tab
+  background image (frames and labels baked in), a knob filmstrip per radius (128 frames, `numFrames` 127, as in
+  stock strips), and on/off images for toggles, triggers and option segments. Shadow canvas y 86..714 maps to the
+  1280x628 plugin area. Several `qlinks` lines in one tab become nested pages that share the design but have
+  different Q-Link sets. Values are MPC `Label` `Value` components (Titillium; the baked labels use the shadow font).
+  Not yet seen on device.
