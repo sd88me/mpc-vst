@@ -39,6 +39,12 @@ See [docs/NOTES.md](docs/NOTES.md) for details, gotchas, and open issues.
   shadow page pixel for pixel. Needs a force-shadow checkout to build `shadow_art`.
 - `tools/studio.py` + `tools/skin_template.svg`: the skin studio. Auto-layout from a module's
   parameters, an Inkscape/Penpot SVG round trip, and page previews. See [docs/SKIN_STUDIO.md](docs/SKIN_STUDIO.md).
+- `tools/bench.sh` + `tools/bench.c`: a CPU stress test run on the device, with a PASS/WARN/FAIL verdict for Gen1
+  hardware. See [docs/BENCH.md](docs/BENCH.md).
+- `tools/release.py`: packages a plugin as one shareable zip with an installer, an uninstaller and generated
+  INSTALL.md. See [docs/RELEASING.md](docs/RELEASING.md).
+- `tools/probe_device.sh`: a read-only device report (CPU, 32/64-bit MPC, audio threads, plugin formats: VST2 yes,
+  VST3 no on current firmware).
 - `tools/host_test.c`: an offline x86 host test (instances, params, MIDI→audio, chunks).
 - `poc/gain.c`, `poc/synth.c`: minimal effect / instrument examples.
 - `poc/midiport.c`: a MIDI-generating plugin (tempo-synced) that drives other tracks through an ALSA port

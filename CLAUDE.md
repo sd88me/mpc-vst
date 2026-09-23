@@ -6,7 +6,8 @@ built-in JUCE plugin host, with native MPC screen skins. Start here:
 1. `docs/NOTES.md`: everything verified on hardware so far, plus open issues. Treat it as the source of
    truth, and add to it whenever you verify something new (with the date).
 2. `docs/PORTING.md`: the checklist for porting an engine or app to a plugin.
-3. `.claude/skills/mpc-vst-plugin/SKILL.md`: the build → skin → register → test workflow and gotchas.
+3. `docs/BENCH.md` (CPU check) and `docs/RELEASING.md` (release zip + installer) before shipping a port.
+4. `.claude/skills/mpc-vst-plugin/SKILL.md`: the build → skin → register → test workflow and gotchas.
 
 Ground rules:
 - Offline first: x86 host test (`tools/host_test.c`, ASan) and an offline skin preview before anything goes

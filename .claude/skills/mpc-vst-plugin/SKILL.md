@@ -77,3 +77,11 @@ and look at it. Skin-only changes need no restart.
 `tools/studio.py`: `auto` (params → first-pass layout.conf), `to-svg` / `from-svg` (Inkscape round trip; tabs are layers,
 controls are labelled groups, Q-Links in layer descriptions), `preview` (built skin → PNGs). Read docs/SKIN_STUDIO.md.
 Always `preview` before deploying. Enum `options=` are optional in layouts (they default to the parameter's own).
+
+## CPU check and release
+- `tools/bench.sh build/x.so <ip> -j`: plays the plugin on the device (idle, chords, Q-Link sweep, release tail),
+  thread-CPU timed, verdict PASS/WARN/FAIL against the 2902 µs block (docs/BENCH.md). Nothing installed; MPC keeps running.
+- `tools/release.py`: one shareable zip (payload + install.sh/uninstall.sh + generated INSTALL.md + SHA256SUMS); the
+  installer stops/restarts MPC, so installing a release on the user's device needs their go-ahead (docs/RELEASING.md).
+- `tools/probe_device.sh` (read-only): arch, CPU, audio workers, plugin formats. VST3 is **not** compiled into MPC OS
+  (Force, 2026-09-24): don't build VST3 ports.

@@ -116,5 +116,16 @@ UpdateDisplay are untested; call it whenever a name changes.
 ## Native picker (menu overlay): not available to VST2 (tested 2026-09-24, `poc/menuprobe.c`)
 MPC's menu overlay (`comboBox` / `Show Overlay "menu overlay"`) opens **empty** for VST2 parameters. MPC never
 calls `effGetParameterProperties` (opcode 56; absent from the probe log), and a `<plugin>.vstxml` ValueType next to
-the .so made no difference. Use image-button selectors (`enum_h`/`enum_v`) or steppers instead. Untested: whether
-MPC loads Linux VST3 plugins, whose parameters carry value lists natively.
+the .so made no difference. Use image-button selectors (`enum_h`/`enum_v`) or steppers instead.
+
+## VST3: not supported by MPC OS (checked on a Force, OS base 5.0.17, 2026-09-24, `tools/probe_device.sh`)
+MPC's JUCE host has only `juce::VSTPluginFormat` compiled in. The binary has no `VST3PluginFormat` /
+`VST3PluginInstance` RTTI and no `GetPluginFactory` string (which JUCE needs to load any VST3 module), and no LV2
+either. The only `VST3` / `.vst3` strings are JUCE's wrapper-type names and a desktop-project file-extension list.
+So a VST3 bundle can't be loaded, whatever the settings say, and VST3 value lists can't fix the empty picker.
+Rerun the probe after firmware updates and on other models.
+
+## CPU layout (Force, 2026-09-24)
+RK3288, 4x Cortex-A17 @ 1.8 GHz (governor `performance`), `isolcpus=2-3`. MPC runs `AudioWorker0-3` (SCHED_FIFO),
+one pinned per core, plus `Audio Processing` (prio 20). Plugins run on these workers, so tracks spread across
+cores. `tools/bench.sh` measures a plugin against the 2902 µs block (docs/BENCH.md).
