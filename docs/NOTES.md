@@ -45,3 +45,8 @@ from the Force and may differ on MPC Live/One/X/Key (e.g. `Force Documents` vs `
    `vst.json` next to `module.json` so any Schwung module (force-acid, …) ports with no code.
 5. Maze's knob-touch note filter (notes 0..9) is compiled out with `-DMAZE_VST=1`, which is built but
    **not yet deployed** (md5 b10668a4…).
+6. **MIDI-output plugins (sequencers/arps): untested.** The `MPC` binary contains the JUCE VST host strings
+   `sendVstEvents` / `sendVstMidiEvent` (the canDo queries for plugin MIDI out), so the host side exists.
+   Unknown: whether MPC OS routes a plugin's MIDI output anywhere (to its own track, other tracks, MIDI out).
+   Test: a PoC plugin that answers canDo `sendVstMidiEvent`, uses `audioMasterGetTime` `ppqPos` for sync,
+   and emits notes via `audioMasterProcessEvents` (opcode 8); put it on a track that feeds a synth.
