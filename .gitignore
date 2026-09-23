@@ -1,2 +1,4 @@
 build/
 *.so
+dist/
+__pycache__/
