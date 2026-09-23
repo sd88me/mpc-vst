@@ -112,3 +112,9 @@ notification at all ticks live on a `Label` `Value`. Parameter **names** (`Label
 plugin calls `audioMasterUpdateDisplay` (opcode 42). So readouts (status, time, now playing), filter names and
 result lists can be plain parameters whose display text the plugin changes. Name changes without
 UpdateDisplay are untested; call it whenever a name changes.
+
+## Native picker (menu overlay): not available to VST2 (tested 2026-09-24, `poc/menuprobe.c`)
+MPC's menu overlay (`comboBox` / `Show Overlay "menu overlay"`) opens **empty** for VST2 parameters. MPC never
+calls `effGetParameterProperties` (opcode 56; absent from the probe log), and a `<plugin>.vstxml` ValueType next to
+the .so made no difference. Use image-button selectors (`enum_h`/`enum_v`) or steppers instead. Untested: whether
+MPC loads Linux VST3 plugins, whose parameters carry value lists natively.
