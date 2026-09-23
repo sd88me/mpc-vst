@@ -1,0 +1,20 @@
+# mpc-vst-plugins: agent guide
+
+Native VST2 plugins for Akai MPC OS standalone devices (MPC Live/One/X/Key, Force), loaded by MPC's
+built-in JUCE plugin host, with native MPC screen skins. Start here:
+
+1. `docs/NOTES.md`: everything verified on hardware so far, plus open issues. Treat it as the source of
+   truth, and add to it whenever you verify something new (with the date).
+2. `docs/PORTING.md`: the checklist for porting an engine or app to a plugin.
+3. `.claude/skills/mpc-vst-plugin/SKILL.md`: the build → skin → register → test workflow and gotchas.
+
+Ground rules:
+- Offline first: x86 host test (`tools/host_test.c`, ASan) and an offline skin preview before anything goes
+  to a device.
+- The device is shared with the user's live setup. Ask before restarting MPC, back up `MPC.settings` before
+  editing it (with MPC stopped), and stage files as `x.new` then `mv`.
+- Never commit Akai's stock skin JSON or PNGs, or the Steinberg SDK. Describe formats instead; the VST2 ABI here is
+  hand-written.
+- Keep the repo device-generic: no private IPs, serials or MockbaMod-specific naming. MockbaMod facts go in
+  NOTES.md only where they affect behaviour.
+- Commit trailers per the session's instructions; one commit per concern.
