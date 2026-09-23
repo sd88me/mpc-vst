@@ -15,6 +15,10 @@
  *   seg|x|y|w|h|RRGGBB|RRGGBB|LABEL   one enum segment: fill colour, text colour
  *   crop|out.ppm|x|y|w|h              write a region of the canvas
  *   strip|out.ppm|r|frames|RRGGBB     vertical knob filmstrip (frames x (2r+10)^2) on a bg colour
+ *   theme|conf                        apply a conf's style=/theme_* lines (render_conf_preview's load_conf)
+ *   readout|cx|cy|w|h|LABEL           readout box + label, no text (MPC draws the live value)
+ *   stepper|cx|cy|w|h|LABEL           < box > stepper + label, no text
+ *   tile|x|y|w|h|FILL|BORDER|bw       list tile: fill, then a border of bw px (0 = the plate-line rules)
  */
 #define main render_conf_preview_main
 #include "render_conf_preview.c"
@@ -93,6 +97,19 @@ int main(void) {
             int x = atoi(a[1]), y = atoi(a[2]), w = atoi(a[3]), h = atoi(a[4]);
             fill_rect(x, y, w, h, HEX(a[5]));
             draw_text_c(x + w / 2, y + h / 2 - 6, a[7], 1.5f, HEX(a[6]));
+        }
+        else if (!strcmp(op, "theme") && n == 2) load_conf(a[1]);
+        else if (!strcmp(op, "readout") && n == 6) widget_readout(atoi(a[1]), atoi(a[2]), atoi(a[3]), atoi(a[4]), a[5][0] == '-' ? "" : a[5], "");
+        else if (!strcmp(op, "stepper") && n == 6) widget_stepper(atoi(a[1]), atoi(a[2]), atoi(a[3]), atoi(a[4]), a[5][0] == '-' ? "" : a[5], "");
+        else if (!strcmp(op, "tile") && n == 8) {
+            int x = atoi(a[1]), y = atoi(a[2]), w = atoi(a[3]), h = atoi(a[4]), bw = atoi(a[7]);
+            fill_rect(x, y, w, h, HEX(a[5]));
+            if (bw > 0) {
+                fill_rect(x, y, w, bw, HEX(a[6])); fill_rect(x, y + h - bw, w, bw, HEX(a[6]));
+                fill_rect(x, y, bw, h, HEX(a[6])); fill_rect(x + w - bw, y, bw, h, HEX(a[6]));
+            } else {
+                fill_rect(x, y, w, 1, PLATE_LINE); fill_rect(x, y + h - 1, w, 1, PLATE_LINE);
+            }
         }
         else if (!strcmp(op, "crop") && n == 6) crop(a[1], atoi(a[2]), atoi(a[3]), atoi(a[4]), atoi(a[5]));
         else if (!strcmp(op, "strip") && n == 5) strip(a[1], atoi(a[2]), atoi(a[3]), HEX(a[4]));
