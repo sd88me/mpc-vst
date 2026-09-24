@@ -284,7 +284,12 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
             k = w["key"]
             need = list_keys(w) if w["kind"] == "list" else [k]
             if w["kind"] == "stepper":
-                need += [k + "_prev", k + "_next"]
+                # prev=/next=: explicit override for the arrow tap-zones' bound parameter, for a
+                # DSP with a real "advance"/"retreat" verb under a DIFFERENT name than "<key>_prev"/
+                # "<key>_next" (e.g. jv880's bank stepper: key=bank_index (a dummy, Q-Link is a
+                # no-op) but prev=prev_bank/next=next_bank, its own real DSP verbs). Falls back to
+                # the "<key>_prev"/"<key>_next" convention when not given.
+                need += [w.get("prev", k + "_prev"), w.get("next", k + "_next")]
                 if w.get("get"):
                     need.append(w["get"])
             for nk in need:
@@ -436,7 +441,8 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                     akey = "shTap_%d_%s_%s" % (t, w["key"], side)
                     defs.setdefault(akey, _local(akey, [_action("Enter Pressed", "Toggle Switch")],
                                                  [_button(aimg, aimg, 1, 1, aw, ah)]))
-                    kids.append(_placed(akey, "%s %s" % (name, side), index[w["key"] + "_" + side], ax, ay, aw, ah, focus="No"))
+                    side_key = w.get(side, w["key"] + "_" + side)
+                    kids.append(_placed(akey, "%s %s" % (name, side), index[side_key], ax, ay, aw, ah, focus="No"))
             elif kind == "list":
                 for slot, ((x, y, tw, th), sk) in enumerate(zip(list_tiles(w), list_keys(w))):
                     img = "sh_tile_%dx%d" % (tw, th)

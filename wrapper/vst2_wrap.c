@@ -129,6 +129,24 @@ static void setParameter(AEffect *e, int32_t i, float n) {
     char buf[64];
     if (i < 0 || i >= NPARAMS) return;
     const param_t *p = &PARAMS[i];
+    if (p->step_target >= 0) {
+        /* A momentary nudge of ANOTHER param (see gen_vst.py's step_of/step_delta comment). Reads
+         * the target's CURRENT value straight from the DSP, not our own cached norm, so it's
+         * correct even if the DSP changed it independently (e.g. loading a bank shifts the patch).
+         * This trigger's own key is never sent to the DSP at all. */
+        if (n > 0.5f) {
+            const param_t *tp = &PARAMS[p->step_target];
+            if (g_api->get_param(w->dsp, tp->key, buf, sizeof buf) > 0) {
+                float cur = (float)atof(buf) + p->step_delta;
+                if (cur < tp->min) cur = tp->min;
+                if (cur > tp->max) cur = tp->max;
+                snprintf(buf, sizeof buf, "%g", cur);
+                g_api->set_param(w->dsp, tp->key, buf);
+            }
+            w->release[i] = 1;
+        }
+        return;
+    }
     if (p->nopts > 1) {
         /* A value on an option (button press, preset, automation) selects it. A value
          * between options is a Q-Link/encoder nudge from the current one: step one
