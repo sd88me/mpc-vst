@@ -19,6 +19,10 @@
 #ifndef HAS_LFO_BPM
 #define HAS_LFO_BPM 0 /* 1: pass the host tempo to the DSP as "lfo_bpm" */
 #endif
+#ifndef MODULE_DIR
+#define MODULE_DIR NULL /* set via vst.json "defines" for a DSP that reads its own files
+                          * (ROMs, etc.) from "<module_dir>/..." (see jv880's create_instance) */
+#endif
 
 /* ---- Schwung plugin_api_v2 (see src/include/plugin_api_v1.h) ------------ */
 typedef struct {
@@ -211,7 +215,8 @@ static intptr_t dispatcher(AEffect *e, int32_t op, int32_t idx, intptr_t v, void
             int k = (int)lroundf(get_norm(w, idx) * (pp->nopts - 1));
             copy_str(p, pp->opts[k], 24);
         } else if (g_api->get_param(w->dsp, pp->key, buf, sizeof buf) > 0) {
-            snprintf(p, 24, "%.*f", fabs(pp->max - pp->min) > 20 ? 0 : 1, atof(buf));
+            if (pp->string_display) copy_str(p, buf, 24);   /* real text (a name, a status), not a number */
+            else snprintf(p, 24, "%.*f", fabs(pp->max - pp->min) > 20 ? 0 : 1, atof(buf));
         }
         return 1;
     }
@@ -250,7 +255,7 @@ __attribute__((visibility("default"))) AEffect *VSTPluginMain(audioMasterCallbac
     if (!g_api) return NULL;
     wrap_t *w = calloc(1, sizeof *w);
     if (!w) return NULL;
-    w->dsp = g_api->create_instance(NULL, NULL);
+    w->dsp = g_api->create_instance(MODULE_DIR, NULL);
     if (!w->dsp) { free(w); return NULL; }
     w->master = master;
     w->pos = DSP_BLOCK;
