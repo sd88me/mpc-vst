@@ -2,8 +2,7 @@
 # Build a port as an MPC OS VST2 instrument from its vst.json (see tools/gen_vst.py).
 #   tools/build_port.sh path/to/vst.json
 # Output in <vst.json folder>/build/: <so>, skin/<vendor> - VST - <name>/, pluginlist-entry.xml, params.h.
-# Needs Docker (with QEMU for arm32v7) and a force-shadow checkout for the skin artwork
-# (FORCE_SHADOW, default: ../force-shadow next to this repo).
+# Needs Docker (with QEMU for arm32v7). The skin artwork renderer is vendored in tools/vendor/force-shadow/.
 set -euo pipefail
 MV="$(cd "$(dirname "$0")/.." && pwd)"
 CFG="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
@@ -11,14 +10,12 @@ eval "$(python3 "$MV/tools/gen_vst.py" "$CFG" --shell)"
 # an engine from another ecosystem: its adapter (adapters/<name>/) provides mpc_engine()
 ADAPTER_SRC=""
 [ -n "$ADAPTER" ] && ADAPTER_SRC="/mv/adapters/$ADAPTER/${ADAPTER}_engine.c"
-FORCE_SHADOW="${FORCE_SHADOW:-$MV/../force-shadow}"
-[ -f "$FORCE_SHADOW/tools/render_conf_preview.c" ] || { echo "need a force-shadow checkout (FORCE_SHADOW)" >&2; exit 1; }
 U="$(id -u):$(id -g)"
 mkdir -p "$ROOT/$PORT/build"
 
 # 1. skin artwork renderer (host binary)
-docker run --rm -u "$U" -v "$ROOT":/w -v "$MV":/mv:ro -v "$FORCE_SHADOW":/fs:ro -w /w gcc:12 \
-  gcc -O2 -I/fs/tools -o "$PORT/build/shadow_art" /mv/tools/shadow_art.c -lm
+docker run --rm -u "$U" -v "$ROOT":/w -v "$MV":/mv:ro -w /w gcc:12 \
+  gcc -O2 -I/mv/tools/vendor/force-shadow/tools -o "$PORT/build/shadow_art" /mv/tools/shadow_art.c -lm
 
 # 2. params.h, skin, plugin-list entry
 # TITLE_FONT (vst.json's optional "title_font", a .ttf/.otf path relative to vst.json): a real

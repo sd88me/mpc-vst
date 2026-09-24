@@ -27,7 +27,7 @@ on:
         type: string
         required: true
       build:
-        description: Command, run from the caller's repo root, that fills <vst_dir>/build (so, skin/, pluginlist-entry.xml)
+        description: Command, run from the caller's repo root, that fills <vst_dir>/build (so, skin/, pluginlist-entry.xml); MPC_VST is set
         type: string
         required: true
       host_test:
@@ -46,10 +46,6 @@ on:
         description: zig version to install, if the build needs it
         type: string
         default: ''
-      force_shadow_ref:
-        description: sd88me/force-shadow ref for the skin artwork renderer
-        type: string
-        default: main
       dry_run:
         description: Build and package only (zip + previews as run artifacts), no draft release
         type: boolean
@@ -63,7 +59,6 @@ jobs:
       VERSION: ${{ inputs.version }}
       VST_DIR: ${{ inputs.vst_dir }}
       MPC_VST: ${{ github.workspace }}/mpc-vst-plugins
-      FORCE_SHADOW: ${{ github.workspace }}/force-shadow
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
     steps:
@@ -88,13 +83,6 @@ jobs:
           repository: sd88me/mpc-vst-plugins
           ref: ${{ inputs.tools_ref }}
           path: mpc-vst-plugins
-
-      - name: Check out force-shadow (skin artwork renderer)
-        uses: actions/checkout@v4
-        with:
-          repository: sd88me/force-shadow
-          ref: ${{ inputs.force_shadow_ref }}
-          path: force-shadow
 
       - name: Set up QEMU (plugins are built for armhf under emulation)
         uses: docker/setup-qemu-action@v3
@@ -170,7 +158,6 @@ jobs:
           ABOUT: ${{ inputs.about }}
           TOOLS_REF: ${{ inputs.tools_ref }}
         run: |
-          fs_sha=$(git -C "$FORCE_SHADOW" rev-parse --short HEAD)
           python3 - "$ZIP" > notes.md <<'PY'
           import os, re, sys, zipfile
           z = zipfile.ZipFile(sys.argv[1])
@@ -181,8 +168,8 @@ jobs:
           print("".join(keep).rstrip() + "\n")
           print("Full instructions, including installing by hand, are in `INSTALL.md` inside the zip.")
           PY
-          printf '\n---\nBuilt by GitHub Actions from %s@%s with mpc-vst-plugins@%s and force-shadow@%s.\n' \
-            "$GITHUB_REPOSITORY" "${GITHUB_SHA::7}" "${TOOLS_REF::7}" "$fs_sha" >> notes.md
+          printf '\n---\nBuilt by GitHub Actions from %s@%s with mpc-vst-plugins@%s.\n' \
+            "$GITHUB_REPOSITORY" "${GITHUB_SHA::7}" "${TOOLS_REF::7}" >> notes.md
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$ZIP" --clobber
             gh release edit "$TAG" --draft --target "$GITHUB_SHA" --title "$NAME VST v$VERSION" --notes-file notes.md

@@ -2,8 +2,8 @@
  * offline renderer (tools/render_conf_preview.c), so a skin generated from a
  * shadow_page.conf is pixel-identical to the Force Shadow page it came from.
  *
- * Build (x86 host is fine; path to a force-shadow checkout):
- *   gcc -O2 -I<force-shadow>/tools -o shadow_art shadow_art.c -lm
+ * Build (x86 host is fine; the renderer is vendored, see tools/vendor/force-shadow/README.md):
+ *   gcc -O2 -Itools/vendor/force-shadow/tools -o shadow_art tools/shadow_art.c -lm
  *
  * Reads commands on stdin, one per line, fields separated by '|':
  *   clear|RRGGBB                      fill the whole 1280x800 canvas
