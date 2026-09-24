@@ -233,7 +233,7 @@ def shape_for(w):
         return "circle", dict(cx=w["cx"], cy=w["cy"] - Y_OFF, r=w["r"])
     if k == "list":
         return "rect", dict(x=w["x"], y=w["y"] - Y_OFF, width=w["w"], height=w["h"])
-    if k in ("readout", "stepper", "slider_v", "slider_h", "menu"):
+    if k in ("readout", "stepper", "slider_v", "slider_h", "menu", "popup"):
         return "rect", dict(x=w["cx"] - w["w"] / 2, y=w["cy"] - w["h"] / 2 - Y_OFF, width=w["w"], height=w["h"])
     if k == "toggle":
         return "rect", dict(x=w["cx"] - 25.5, y=w["cy"] - 13.5 - Y_OFF, width=51, height=27)
@@ -366,7 +366,7 @@ def element_to_line(label, geo):
                 w[k] = int(w.get(k, {"rows": 4, "cols": 1, "gap": 4}[k]))
     elif kind == "knob":
         w.update(cx=round(cx), cy=round(cy + Y), r=max(12, round(gw / 2)))
-    elif kind in ("readout", "stepper", "slider_v", "slider_h", "menu"):
+    elif kind in ("readout", "stepper", "slider_v", "slider_h", "menu", "popup"):
         w.update(cx=round(cx), cy=round(cy + Y), w=round(gw), h=round(gh))
     elif kind == "enum_h":
         w.update(cx=round(cx), cy=round(cy + Y))
@@ -377,7 +377,7 @@ def element_to_line(label, geo):
             w["sw"] = max(20, round((gw - 2 * (per - 1)) / per))
     else:
         w.update(cx=round(cx), cy=round(cy + Y))
-    for k in ("sw", "rows"):
+    for k in ("sw", "rows", "cols"):
         if k in w and not isinstance(w[k], int):
             w[k] = int(w[k])
     if "options" in w:
@@ -424,17 +424,37 @@ def from_svg(svg_path):
 
 # ---------------------------------------------------------------- preview
 
+def shown(c, open_popups):
+    """Evaluate a component's IndexedEnabling handles with every parameter at 0, except 2-way ones
+    (popup "open" flags) at 1 when open_popups."""
+    for hnd in c["bounds"].get("additionalInvalidatingHandles", []):
+        m = re.match(r"IndexedEnabling/(\d+)/(\d+)/", hnd)
+        if m and int(m.group(1)) != (1 if open_popups and m.group(2) == "2" else 0):
+            return False
+    return True
+
+
 def preview(skin_dir, out_pattern, frame=40):
-    """Composite a built skin into PNGs (what MPC should draw), one per page. Needs Pillow."""
+    """Composite a built skin into PNGs (what MPC should draw), one per page, plus a
+    "<page> (popups open)" image for a page with popups. Needs Pillow."""
     from PIL import Image, ImageDraw, ImageFont
     t = json.load(open(os.path.join(skin_dir, "TUI.json")))["pageData"]
     defs = {d["key"]: d["value"] for d in t["componentDefinitions"]["localComponentDefinitions"]}
     xywh = lambda b: [int(float(v)) for v in b["bounds"].split()]
     outs = []
+    pages = []
     for n, tab in enumerate(t["tabs"]):
+        comps = defs[tab["componentName"]]["componentsData"]
+        pages.append((out_pattern % n, tab, False))
+        if any("IndexedEnabling" in h for c in comps for h in c["bounds"].get("additionalInvalidatingHandles", [])):
+            base, ext = os.path.splitext(out_pattern % n)
+            pages.append((base + "_open" + ext, tab, True))
+    for out, tab, open_popups in pages:
         im = Image.new("RGB", (W, H), (0, 0, 0))
         dr = ImageDraw.Draw(im)
         for c in defs[tab["componentName"]]["componentsData"]:
+            if not shown(c, open_popups):
+                continue
             cd = c["componentData"]
             x, y, w, h = xywh(c["bounds"])
             if cd["type"] == "Image":
@@ -443,7 +463,9 @@ def preview(skin_dir, out_pattern, frame=40):
             for s in defs[cd["type"]]["componentsData"]:
                 sd = s["componentData"]
                 sx, sy, sw, sh = xywh(s["bounds"])
-                if sd["type"] == "Knob":
+                if sd["type"] == "Image":
+                    im.paste(Image.open(os.path.join(skin_dir, sd["data"]["image"])).convert("RGB"), (x + sx, y + sy))
+                elif sd["type"] == "Knob":
                     st = Image.open(os.path.join(skin_dir, sd["data"]["filmStrip"])).convert("RGBA")
                     fw = st.size[0]
                     fr = st.crop((0, frame * fw, fw, (frame + 1) * fw))
@@ -473,9 +495,8 @@ def preview(skin_dir, out_pattern, frame=40):
                         dr.rectangle([x + sx, y + sy, x + sx + sw - 1, y + sy + sh - 1], outline=(70, 110, 160))
         qx, qy, qw, qh = [int(v) for v in tab["qlinkBoundsData"][0].split()]
         dr.rectangle([qx, qy, qx + qw, qy + qh], outline=(80, 200, 120))
-        out = out_pattern % n
         im.save(out)
-        outs.append((out, tab["tabName"]))
+        outs.append((out, tab["tabName"] + (" (popups open)" if open_popups else "")))
     return outs
 
 

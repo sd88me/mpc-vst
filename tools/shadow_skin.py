@@ -16,7 +16,11 @@ Layout file:
     slider_v cx= cy= w= h= label="..." key=<param>     (vertical slider; value text below)
     slider_h cx= cy= w= h= label="..." key=<param>     (horizontal slider; value text below)
     readout cx= cy= w= h= label="..." key=<param>      (live value text)
-    menu    cx= cy= w= h= label="..." key=<param>      (value text; tap opens MPC's native picker)
+    menu    cx= cy= w= h= label="..." key=<param>      (value text; tap opens MPC's native picker -- which
+                                                         opens EMPTY for a VST2, see docs/NOTES.md; use popup)
+    popup   cx= cy= w= h= label="..." key=<param> [options="A,B,.."] [cols=<n>]
+                                                       (value text; tap opens a drawn option list, a pick closes it.
+                                                        Needs the hidden "<param>__open" param: popup_params())
     stepper cx= cy= w= h= label="..." key=<param>      (live text; arrows = <param>_prev / <param>_next)
     list    x= y= w= h= cols= rows= th= gap= key=<p>   (rows = params <p>_1..<p>_N: text + tap)
     qlinks  "PAGE NAME" = key,key,...                  (optional, repeatable)
@@ -43,7 +47,10 @@ DISPLAY_INK = "cdeb63"   # theme_display_ink: live-text colour over a dotreadout
 TD3 = False   # style=td3: frames are filled boxes, so widget crops sit on BOX, not the page bg
 FRAMES = 128               # filmstrip frames (stock strips: 128, numFrames 127)
 KNOB_QLINKS = [13, 9, 5, 1, 14, 10, 6, 2]
-CONTROL_KINDS = ("knob", "slider_v", "slider_h", "toggle", "button", "enum_h", "enum_v", "readout", "stepper", "list", "menu")
+CONTROL_KINDS = ("knob", "slider_v", "slider_h", "toggle", "button", "enum_h", "enum_v", "readout", "stepper", "list", "menu",
+                 "popup")
+OPEN_SUFFIX = "__open"     # popup: hidden wrapper-only param, 1 while the option list is shown
+POP_ROW, POP_GAP, POP_PAD = 40, 2, 6
 THEME_KEYS = {"bg": "PLATE", "ink": "INK", "ink_dim": "INK_DIM", "accent": "ACCENT", "accent_hi": "ACCENT_HI",
               "seg_active": "SEG_ON", "seg_inactive": "SEG_OFF", "seg_active_tx": "SEG_ON_TX",
               "lcd": "LCD", "line": "LINE", "btn_bg": "BTN_BG", "btn_text": "BTN_TEXT", "box": "BOX",
@@ -152,6 +159,46 @@ def list_tiles(w):
 def stepper_arrows(w):
     x0, y0, h = w["cx"] - w["w"] // 2, w["cy"] - w["h"] // 2, w["h"]
     return (x0, y0, h, h), (x0 + w["w"] - h, y0, h, h)
+
+
+def popup_params(layout_path, params):
+    """The hidden "<key>__open" params the layout's popups need, to append after the module's own
+    (appending keeps every existing parameter index, so saved projects stay valid). The wrapper keeps
+    their value itself (never sent to the DSP) and clears it when an option is picked."""
+    have = {p["key"] for p in params}
+    extra = []
+    for tab in parse_layout(layout_path)[0]:
+        for w in tab["widgets"]:
+            if w["kind"] == "popup" and w["key"] + OPEN_SUFFIX not in have:
+                src = next((p for p in params if p["key"] == w["key"]), {})
+                extra.append({"key": w["key"] + OPEN_SUFFIX, "name": "%s List" % src.get("name", w["key"]),
+                              "type": "enum", "options": ["Closed", "Open"], "default": 0, "popup_of": w["key"]})
+                have.add(w["key"] + OPEN_SUFFIX)
+    return extra
+
+
+def popup_panel(w):
+    """Option list geometry (shadow coords): (panel rect, [option rects]). Opens below the field,
+    else above, else from the top of the plugin area; columns when the options don't fit one."""
+    n = len(w["options"])
+    fx, fy, fw, fh = w["cx"] - w["w"] // 2, w["cy"] - w["h"] // 2, w["w"], w["h"]
+    below, above = Y_OFF + H - (fy + fh + 4), fy - 4 - Y_OFF
+    for cols in ([w["cols"]] if w.get("cols") else range(1, n + 1)):
+        rows = -(-n // cols)
+        ph = rows * (POP_ROW + POP_GAP) - POP_GAP + 2 * POP_PAD
+        if ph <= max(below, above):
+            break
+    pw = cols * fw + (cols - 1) * POP_GAP + 2 * POP_PAD
+    if ph <= below:
+        py = fy + fh + 4
+    elif ph <= above:
+        py = fy - 4 - ph
+    else:
+        py = Y_OFF   # nothing fits beside the field: the list covers it (a pick still closes it)
+    px = max(0, min(fx, W - pw))
+    opts = [(px + POP_PAD + (o // rows) * (fw + POP_GAP), py + POP_PAD + (o % rows) * (POP_ROW + POP_GAP), fw, POP_ROW)
+            for o in range(n)]
+    return (px, py, pw, ph), opts
 
 
 def qlink_for_slot(slot):
@@ -292,6 +339,7 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
     # and off by default (every other port keeps the baked font unchanged).
     TITLE_FONT = os.environ.get("SHADOW_TITLE_FONT")
     title_overlays = []   # (bg_name, x, y, title), drawn onto that background PNG after it exists
+    chevrons = []         # (bg_name, x, y): popup fields' "opens a list" marker, drawn the same way
     theme_conf = os.path.join(work, "theme.conf")
     open(theme_conf, "w").write("\n".join(l for l in top if not l.startswith("qlinks_track")) + "\n")
     script.append("theme|" + theme_conf)
@@ -325,9 +373,14 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                 controls += list_keys(w)
                 continue
             p = params[index[k]]
+            if w["kind"] == "popup":
+                if k + OPEN_SUFFIX not in index:
+                    raise SystemExit("layout: popup %r needs param %r (build through gen_vst.py)" % (k, k + OPEN_SUFFIX))
+                if not w.get("options"):
+                    w["options"] = [str(o) for o in p.get("options") or []]
             if w["kind"].startswith("enum") and not w.get("options"):
                 w["options"] = [str(o).upper() for o in p.get("options") or []]   # default: the parameter's own
-            if w["kind"].startswith("enum") and len(w["options"]) != len(p.get("options") or []):
+            if (w["kind"].startswith("enum") or w["kind"] == "popup") and len(w["options"]) != len(p.get("options") or []):
                 raise SystemExit("layout: %s has %d options, parameter has %d" % (k, len(w["options"]), len(p.get("options") or [])))
             controls.append(k)
 
@@ -347,8 +400,10 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                     title_overlays.append((bg, w["x"], w["y"], w["title"]))
                 else:
                     script.append("frame|%d|%d|%d|%d|%s" % (w["x"], w["y"], w["w"], w["h"], w.get("title") or "-"))
-            elif w["kind"] in ("readout", "stepper", "menu"):
-                op = "readout" if w["kind"] == "menu" else w["kind"]
+            elif w["kind"] in ("readout", "stepper", "menu", "popup"):
+                op = "readout" if w["kind"] in ("menu", "popup") else w["kind"]
+                if w["kind"] == "popup":
+                    chevrons.append((bg, w["cx"] + w["w"] // 2 - 22, w["cy"] - Y_OFF))
                 if w["kind"] in ("readout", "stepper") and w.get("style") == "dotmatrix":
                     op = "dot" + op
                 script.append("%s|%d|%d|%d|%d|%s" % (op, w["cx"], w["cy"], w["w"], w["h"], w.get("label") or "-"))
@@ -370,6 +425,7 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                 img = "sh_arrow_%d_%s_%s" % (t, w["key"], side)
                 script.append("crop|%s|%d|%d|%d|%d" % (art(img), ax, ay, aw, ah))
 
+        on_top = []   # popup panels: drawn last, so an open list covers (and takes touches from) the page
         for w in tab["widgets"]:
             kind = w["kind"]
             if kind not in CONTROL_KINDS:
@@ -450,6 +506,39 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                            _action("Enter Pressed", "Show Overlay", "menu overlay")]
                 defs.setdefault(key, _local(key, overlay, [_focus(rw, rh), _value_label(8, 0, rw - 16, rh, 26.0, ACCENT)]))
                 kids.append(_placed(key, name, i, x, y, rw, rh))
+            elif kind == "popup":
+                # Data = the "open" flag (a tap toggles it); Text = the enum, whose value the field shows.
+                # The list is visible only while open (IndexedEnabling, docs/NOTES.md) and is one radio
+                # group on the enum; the wrapper clears "open" when an option is picked.
+                oi = index[w["key"] + OPEN_SUFFIX]
+                x, y, rw, rh = w["cx"] - w["w"] // 2, w["cy"] - w["h"] // 2, w["w"], w["h"]
+                key = "shPopField_%dx%d" % (rw, rh)
+                defs.setdefault(key, _local(key, [_action("Mouse Down", "Toggle Switch"), _action("Enter Pressed", "Toggle Switch")],
+                                            [_focus(rw, rh), _value_label(8, 0, rw - 44, rh, 26.0, ACCENT, handle="Text")]))
+                kids.append(_placed(key, name, oi, x, y, rw, rh, extra={"Text": i}))
+                (px, py, pw, ph), orects = popup_panel(w)
+                shown = "IndexedEnabling/1/2/Parameter %d" % oi
+                panel = "sh_pop_%d_%s" % (t, w["key"])
+                script += ["clear|" + LCD, "tile|%d|%d|%d|%d|%s|%s|2" % (px, py, pw, ph, LCD, ACCENT),
+                           "crop|%s|%d|%d|%d|%d" % (art(panel), px, py, pw, ph)]
+                pkey = "shPopPanel_%d_%s" % (t, w["key"])
+                defs[pkey] = _local(pkey, [], [_sub("Image", {"version": 2, "imageType": "Regular", "colour": "0",
+                                                              "image": panel + ".png"}, _bounds(0, 0, pw, ph), "Image")])
+                parts = [_placed(pkey, "%s list" % name, oi, px, py, pw, ph, focus="No")]
+                n = len(w["options"])
+                for o, (ox, oy, ow, oh) in enumerate(orects):
+                    img = "sh_popopt_%d_%s_%d" % (t, w["key"], o)
+                    for state, fill, ink in (("on", SEG_ON, SEG_ON_TX), ("off", LCD, INK)):
+                        script += ["clear|" + LCD, "seg|%d|%d|%d|%d|%s|%s|%s" % (ox, oy, ow, oh, fill, ink, w["options"][o]),
+                                   "crop|%s|%d|%d|%d|%d" % (art("%s_%s" % (img, state)), ox, oy, ow, oh)]
+                    okey = "shPopOpt_%d_%s_%d" % (t, w["key"], o)
+                    defs[okey] = _local(okey, [_action("Mouse Down", "Q-Link")],
+                                        [_button(img + "_on.png", img + "_off.png", o, n, ow, oh)])
+                    parts.append(_placed(okey, "%s %s" % (name, w["options"][o]), i, ox, oy, ow, oh, focus="No"))
+                for c in parts:
+                    c["bounds"]["showWhenDataModelInvalid"] = "Show"
+                    c["bounds"]["additionalInvalidatingHandles"] = [shown]
+                on_top += parts
             elif kind == "readout":
                 x, y, rw, rh = w["cx"] - w["w"] // 2, w["cy"] - w["h"] // 2, w["w"], w["h"]
                 dot = w.get("style") == "dotmatrix"
@@ -504,6 +593,7 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                                        [_button(img + "_on.png", img + "_off.png", o, n, sw, sh)])
                     kids.append(_placed(key, "%s %s" % (name, lab), i, x, y, sw, sh, focus="Yes" if o == 0 else "No"))
 
+        kids += on_top
         sets = tab["qlinks"] or [(tab["name"], controls[:16])]
         for sp, (title, keys) in enumerate(sets):
             if len(keys) > 16:
@@ -545,6 +635,15 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
             for x, y, title in items:
                 dr.text((x + 18, y + 8 - Y_OFF), title, font=font, fill="#" + ACCENT_HI)
             im.save(path)
+    if chevrons:
+        from PIL import Image, ImageDraw
+        for bg in {c[0] for c in chevrons}:
+            path = os.path.join(skin_dir, bg + ".png")
+            im = Image.open(path).convert("RGB")
+            dr = ImageDraw.Draw(im)
+            for _, x, y in (c for c in chevrons if c[0] == bg):
+                dr.polygon([(x - 8, y - 4), (x + 8, y - 4), (x, y + 5)], fill="#" + ACCENT)
+            im.save(path)
     for img, sw_, sh_, vert in sliders:
         square_strip(os.path.join(skin_dir, img + ".png"), sw_, sh_)
     for f in os.listdir(work):
@@ -580,7 +679,7 @@ def qlink_bounds(tab, keys):
             xs += [w["cx"] - max(65, w["w"] // 2), w["cx"] + max(65, w["w"] // 2)]
             ys += [w["cy"] - w["h"] // 2, w["cy"] + w["h"] // 2 + 56]
             continue
-        if w["kind"] in ("readout", "stepper", "menu"):
+        if w["kind"] in ("readout", "stepper", "menu", "popup"):
             xs += [w["cx"] - w["w"] // 2, w["cx"] + w["w"] // 2]
             ys += [w["cy"] - w["h"] // 2 - 26, w["cy"] + w["h"] // 2]
             continue

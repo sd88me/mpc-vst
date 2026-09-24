@@ -15,6 +15,7 @@ vst.json (paths are relative to the vst.json's folder):
       "build": {"root": "..", "sources": ["src/maze_voice.c"], "cflags": ["-Isrc", "-DMAZE_VST=1"], "libs": ["-lm"]}
     }
 The VST parameter index of each key is its position in chain_params; skins bind to it as "Parameter N".
+A layout's popups add one hidden "<key>__open" param each, after chain_params.
 Keep uid and so fixed across releases, and never reorder chain_params (saved projects store values by index).
 """
 import json
@@ -65,7 +66,7 @@ def gen_params(cfg, params, out):
              "#pragma once",
              "typedef struct { const char *key, *name, *unit; float min, max, def; int nopts; "
              "const char *const *opts; int momentary; int string_display; int int_display; "
-             "int step_target; float step_delta; } param_t;"]
+             "int step_target; float step_delta; int popup_of; } param_t;"]
     key_to_index = {p["key"]: i for i, p in enumerate(params)}
     rows = []
     for i, p in enumerate(params):
@@ -87,22 +88,25 @@ def gen_params(cfg, params, out):
         # docs/NOTES.md. This trigger's OWN key is never sent to the DSP at all.
         step_target = key_to_index.get(p.get("step_of"), -1)
         step_delta = p.get("step_delta", 0)
+        # "popup_of" -- a layout popup's hidden "open" flag (shadow_skin.popup_params): the wrapper
+        # keeps its value itself, never sends it to the DSP, and clears it when that param is picked.
+        popup_of = key_to_index.get(p.get("popup_of"), -1)
         if opts:
             lines.append("static const char *const OPTS_%d[] = {%s};" % (i, ", ".join(c_str(o) for o in opts)))
             d = p.get("default", 0)
             if isinstance(d, str):
                 d = opts.index(d) if d in opts else 0
             norm = d / (len(opts) - 1) if len(opts) > 1 else 0
-            rows.append("    {%s, %s, \"\", 0, 0, %s, %d, OPTS_%d, %d, %d, %d, %d, %s}," % (
+            rows.append("    {%s, %s, \"\", 0, 0, %s, %d, OPTS_%d, %d, %d, %d, %d, %s, %d}," % (
                 c_str(p["key"]), name, fl(norm), len(opts), i, p.get("access") == "write", is_str, is_int,
-                step_target, fl(step_delta)))
+                step_target, fl(step_delta), popup_of))
         else:
             lo, hi = p.get("min", 0), p.get("max", 1)
             d = p.get("default", lo)
             norm = (d - lo) / (hi - lo) if hi > lo else 0
-            rows.append("    {%s, %s, %s, %s, %s, %s, 0, 0, %d, %d, %d, %d, %s}," % (
+            rows.append("    {%s, %s, %s, %s, %s, %s, 0, 0, %d, %d, %d, %d, %s, %d}," % (
                 c_str(p["key"]), name, c_str(p.get("unit", "")), fl(lo), fl(hi), fl(norm),
-                p.get("access") == "write", is_str, is_int, step_target, fl(step_delta)))
+                p.get("access") == "write", is_str, is_int, step_target, fl(step_delta), popup_of))
     lines += ["static const param_t PARAMS[] = {"] + rows + ["};", "#define NPARAMS %d" % len(params),
               "#define PLUG_NAME %s" % c_str(cfg["name"]), "#define PLUG_VENDOR %s" % c_str(cfg["vendor"]),
               "#define PLUG_UID 0x%08x /* '%s' */" % (int.from_bytes(cfg["uid"].encode(), "big"), cfg["uid"]),
@@ -136,12 +140,14 @@ def main():
             print("%s=%s" % (k, shlex.quote(v)))
         return
     params = module_params(os.path.join(here, cfg["module"]))
+    import shadow_skin
+    if cfg.get("layout"):
+        params = params + shadow_skin.popup_params(os.path.join(here, cfg["layout"]), params)
     os.makedirs(build, exist_ok=True)
     gen_params(cfg, params, os.path.join(build, "params.h"))
     print("params.h: %d params" % len(params))
     open(os.path.join(build, "pluginlist-entry.xml"), "w").write(entry(cfg) + "\n")
 
-    import shadow_skin
     if cfg.get("layout"):
         layout = os.path.join(here, cfg["layout"])
     else:

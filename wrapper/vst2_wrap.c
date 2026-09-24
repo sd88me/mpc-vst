@@ -91,6 +91,7 @@ typedef struct {
     double bpm;
     volatile char release[NPARAMS];  /* momentary params to report back to 0 */
     volatile char need_update_display;  /* deferred audioMasterUpdateDisplay -- see setParameter() */
+    float local[NPARAMS];    /* popup "open" flags: kept here, never sent to the DSP or saved */
     char chunk[8192];
 } wrap_t;
 
@@ -121,6 +122,7 @@ static float str_to_norm(const param_t *p, const char *s) {
 static float get_norm(wrap_t *w, int i) {
     char buf[64];
     if (i < 0 || i >= NPARAMS) return 0;
+    if (PARAMS[i].popup_of >= 0) return w->local[i];
     if (g_api->get_param(w->dsp, PARAMS[i].key, buf, sizeof buf) <= 0) return PARAMS[i].def;
     return str_to_norm(&PARAMS[i], buf);
 }
@@ -130,6 +132,11 @@ static void setParameter(AEffect *e, int32_t i, float n) {
     char buf[64];
     if (i < 0 || i >= NPARAMS) return;
     const param_t *p = &PARAMS[i];
+    int nudge = 0;
+    if (p->popup_of >= 0) {   /* a popup field tapped: show/hide its option list (skin IndexedEnabling) */
+        w->local[i] = n > 0.5f ? 1.0f : 0.0f;
+        return;
+    }
     if (p->step_target >= 0) {
         /* A momentary nudge of ANOTHER param (see gen_vst.py's step_of/step_delta comment). Reads
          * the target's CURRENT value straight from the DSP, not our own cached norm, so it's
@@ -163,6 +170,7 @@ static void setParameter(AEffect *e, int32_t i, float n) {
          * option that way, else small nudges round back and never change state. */
         float pos = clamp01(n) * (p->nopts - 1);
         if (fabsf(pos - roundf(pos)) > 0.001f) {
+            nudge = 1;
             float cur = get_norm(w, i) * (p->nopts - 1);
             int idx = (int)lroundf(cur) + (pos > cur ? 1 : -1);
             if (idx < 0) idx = 0;
@@ -173,6 +181,12 @@ static void setParameter(AEffect *e, int32_t i, float n) {
     norm_to_str(p, n, buf, sizeof buf);
     g_api->set_param(w->dsp, PARAMS[i].key, buf);
     if (PARAMS[i].momentary && n > 0.5f) w->release[i] = 1;
+    /* An option picked exactly (a popup list button) closes that param's open popup; a Q-Link
+     * nudge lands between options, so turning the knob leaves the list open. The host hears
+     * "open = 0" from processReplacing (w->release), not from inside its own call. */
+    if (!nudge)
+        for (int j = 0; j < NPARAMS; j++)
+            if (PARAMS[j].popup_of == i && w->local[j] > 0.5f) { w->local[j] = 0; w->release[j] = 1; }
     w->need_update_display = 1;   /* deferred to processReplacing(), see the step_target branch above */
 }
 
