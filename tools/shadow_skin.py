@@ -318,6 +318,16 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
         script.append("crop|%s|0|%d|%d|%d" % (art(bg), Y_OFF, W, H))
         kids.append(_sub("Image", {"version": 2, "imageType": "Regular", "colour": "0", "image": bg + ".png"},
                          _bounds(0, 0, W, H), "Background"))
+        # Stepper arrow tap-zones: crop the arrow glyph ALREADY drawn into this background (by
+        # widget_stepper/dot_stepper) as the tap-zone's own on/off image. An empty onImage/offImage
+        # ("") makes MPC show a generic placeholder caption ("Button") over the arrow instead of
+        # nothing -- found on a real device (the stepper feature's first real hardware test).
+        for w in tab["widgets"]:
+            if w["kind"] != "stepper":
+                continue
+            for side, (ax, ay, aw, ah) in zip(("prev", "next"), stepper_arrows(w)):
+                img = "sh_arrow_%d_%s_%s" % (t, w["key"], side)
+                script.append("crop|%s|%d|%d|%d|%d" % (art(img), ax, ay, aw, ah))
 
         for w in tab["widgets"]:
             kind = w["kind"]
@@ -422,9 +432,10 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                                                           handle="Text")]))
                 kids.append(_placed(key, name, i, x0 + h + 3, y0, w["w"] - 2 * h - 6, h, extra={"Text": gi}))
                 for side, (ax, ay, aw, ah) in zip(("prev", "next"), stepper_arrows(w)):
-                    akey = "shTap_%dx%d" % (aw, ah)
+                    aimg = "sh_arrow_%d_%s_%s.png" % (t, w["key"], side)
+                    akey = "shTap_%d_%s_%s" % (t, w["key"], side)
                     defs.setdefault(akey, _local(akey, [_action("Enter Pressed", "Toggle Switch")],
-                                                 [_button("", "", 1, 1, aw, ah)]))
+                                                 [_button(aimg, aimg, 1, 1, aw, ah)]))
                     kids.append(_placed(akey, "%s %s" % (name, side), index[w["key"] + "_" + side], ax, ay, aw, ah, focus="No"))
             elif kind == "list":
                 for slot, ((x, y, tw, th), sk) in enumerate(zip(list_tiles(w), list_keys(w))):
