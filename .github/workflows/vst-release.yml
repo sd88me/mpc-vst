@@ -1,0 +1,214 @@
+# Reusable: build a port, package it with tools/release.py and attach the zip to a DRAFT release
+# in the calling repo. A person then installs that exact zip on a device (docs/RELEASING.md steps
+# 4-5), and publishes the draft, which creates the tag. See docs/RELEASING.md "Releasing from CI".
+#
+# Call it from the port's repo, pinning this repo to one commit in BOTH places:
+#   uses: sd88me/mpc-vst-plugins/.github/workflows/vst-release.yml@<sha>
+#   with: { tools_ref: <sha>, ... }
+name: VST draft release
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag, e.g. maze-voice-vst-v1.2.0
+        type: string
+        required: true
+      version:
+        description: Version for the zip and INSTALL.md, e.g. 1.2.0
+        type: string
+        required: true
+      tools_ref:
+        description: This repo's commit - the same one as in the caller's uses:@ref
+        type: string
+        required: true
+      vst_dir:
+        description: The port's vst folder, relative to the caller's repo root; the build writes <vst_dir>/build
+        type: string
+        required: true
+      build:
+        description: Command, run from the caller's repo root, that fills <vst_dir>/build (so, skin/, pluginlist-entry.xml)
+        type: string
+        required: true
+      host_test:
+        description: Optional host test command (e.g. "$MPC_VST/tools/test_port.sh" path/vst.json)
+        type: string
+        default: ''
+      extra:
+        description: Optional release.py --extra SRC:DEST specs, space-separated, SRC relative to the caller's repo root
+        type: string
+        default: ''
+      about:
+        description: One line about the plugin, for INSTALL.md and the release notes
+        type: string
+        default: ''
+      zig:
+        description: zig version to install, if the build needs it
+        type: string
+        default: ''
+      force_shadow_ref:
+        description: sd88me/force-shadow ref for the skin artwork renderer
+        type: string
+        default: main
+      dry_run:
+        description: Build and package only (zip + previews as run artifacts), no draft release
+        type: boolean
+        default: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag }}
+      VERSION: ${{ inputs.version }}
+      VST_DIR: ${{ inputs.vst_dir }}
+      MPC_VST: ${{ github.workspace }}/mpc-vst-plugins
+      FORCE_SHADOW: ${{ github.workspace }}/force-shadow
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Refuse to touch a published release
+        if: ${{ !inputs.dry_run }}
+        run: |
+          state=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
+                    --jq ".[] | select(.tag_name == \"$TAG\") | if .draft then \"draft\" else \"published\" end" | head -1)
+          echo "existing release for $TAG: ${state:-none}"
+          if [ "$state" = published ]; then
+            echo "::error::$TAG is already published - bump the version"; exit 1
+          fi
+
+      - name: Check out the port
+        uses: actions/checkout@v4
+        with:
+          path: port
+
+      - name: Check out mpc-vst-plugins (tools)
+        uses: actions/checkout@v4
+        with:
+          repository: sd88me/mpc-vst-plugins
+          ref: ${{ inputs.tools_ref }}
+          path: mpc-vst-plugins
+
+      - name: Check out force-shadow (skin artwork renderer)
+        uses: actions/checkout@v4
+        with:
+          repository: sd88me/force-shadow
+          ref: ${{ inputs.force_shadow_ref }}
+          path: force-shadow
+
+      - name: Set up QEMU (plugins are built for armhf under emulation)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm
+
+      - name: Set up zig
+        if: ${{ inputs.zig != '' }}
+        uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ inputs.zig }}
+
+      - name: Install Pillow (skin and previews)
+        run: python3 -m pip install --quiet pillow
+
+      - name: Build
+        working-directory: port
+        env:
+          BUILD: ${{ inputs.build }}
+        run: bash -euo pipefail -c "$BUILD"
+
+      - name: Host test
+        if: ${{ inputs.host_test != '' }}
+        working-directory: port
+        env:
+          HOST_TEST: ${{ inputs.host_test }}
+        run: bash -euo pipefail -c "$HOST_TEST"
+
+      - name: Package with release.py
+        id: pkg
+        working-directory: port
+        env:
+          EXTRA: ${{ inputs.extra }}
+          ABOUT: ${{ inputs.about }}
+        run: |
+          B="$VST_DIR/build"
+          entry="$B/pluginlist-entry.xml"
+          so="$B/$(sed -n 's/.* file="[^"]*\/\([^"/]*\)".*/\1/p' "$entry")"
+          skins=("$B"/skin/*/)
+          [ ${#skins[@]} = 1 ] || { echo "::error::expected one skin folder in $B/skin, found ${#skins[@]}"; exit 1; }
+          skin="${skins[0]%/}"
+          [ -d "$skin" ] || { echo "::error::no skin folder in $B/skin"; exit 1; }
+          file -b "$so" | grep -q 'ELF 32-bit LSB.*ARM' || { echo "::error::$so is not a 32-bit ARM ELF: $(file -b "$so")"; exit 1; }
+          args=(--so "$so" --skin "$skin" --entry "$entry" --version "$VERSION" --about "$ABOUT" -o "$GITHUB_WORKSPACE/dist")
+          if [ -f "$VST_DIR/bench.txt" ]; then
+            args+=(--bench "$VST_DIR/bench.txt"); bench="from committed $VST_DIR/bench.txt"
+          else
+            bench="**not measured** - no $VST_DIR/bench.txt, so INSTALL.md has no CPU section"
+          fi
+          for e in $EXTRA; do args+=(--extra "$e"); done
+          python3 "$MPC_VST/tools/release.py" "${args[@]}"
+          mkdir -p "$GITHUB_WORKSPACE/previews"
+          python3 "$MPC_VST/tools/studio.py" preview "$skin/Plugin Skins" -o "$GITHUB_WORKSPACE/previews/page_%d.png"
+          zip=$(ls "$GITHUB_WORKSPACE"/dist/*.zip)
+          echo "zip=$zip" >> "$GITHUB_OUTPUT"
+          echo "name=$(sed -n 's/.* name="\([^"]*\)".*/\1/p' "$entry")" >> "$GITHUB_OUTPUT"
+          echo "bench=$bench" >> "$GITHUB_OUTPUT"
+
+      - name: Upload zip and skin previews as run artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.tag }}
+          path: |
+            dist/*.zip
+            previews/
+          retention-days: 14
+
+      - name: Create or update the draft release
+        if: ${{ !inputs.dry_run }}
+        env:
+          ZIP: ${{ steps.pkg.outputs.zip }}
+          NAME: ${{ steps.pkg.outputs.name }}
+          ABOUT: ${{ inputs.about }}
+          TOOLS_REF: ${{ inputs.tools_ref }}
+        run: |
+          fs_sha=$(git -C "$FORCE_SHADOW" rev-parse --short HEAD)
+          python3 - "$ZIP" > notes.md <<'PY'
+          import os, re, sys, zipfile
+          z = zipfile.ZipFile(sys.argv[1])
+          md = z.read(next(n for n in z.namelist() if n.endswith("/INSTALL.md"))).decode()
+          keep = [s for s in re.split(r"(?m)^(?=## )", md) if s.startswith(("## Requirements", "## Install (scripted)"))]
+          if os.environ["ABOUT"]:
+              print(os.environ["ABOUT"] + "\n")
+          print("".join(keep).rstrip() + "\n")
+          print("Full instructions, including installing by hand, are in `INSTALL.md` inside the zip.")
+          PY
+          printf '\n---\nBuilt by GitHub Actions from %s@%s with mpc-vst-plugins@%s and force-shadow@%s.\n' \
+            "$GITHUB_REPOSITORY" "${GITHUB_SHA::7}" "${TOOLS_REF::7}" "$fs_sha" >> notes.md
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ZIP" --clobber
+            gh release edit "$TAG" --draft --target "$GITHUB_SHA" --title "$NAME VST v$VERSION" --notes-file notes.md
+          else
+            gh release create "$TAG" "$ZIP" --draft --target "$GITHUB_SHA" --title "$NAME VST v$VERSION" --notes-file notes.md
+          fi
+
+      - name: Summary
+        env:
+          ZIP: ${{ steps.pkg.outputs.zip }}
+          BENCH: ${{ steps.pkg.outputs.bench }}
+          DRY: ${{ inputs.dry_run }}
+        run: |
+          {
+            echo "## $TAG"
+            if [ "$DRY" = true ]; then
+              echo "Dry run: no release. The zip and skin previews are in this run's artifacts."
+            else
+              echo "Draft release updated: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases (drafts are only visible to maintainers)."
+            fi
+            echo "- Zip: \`$(basename "$ZIP")\` ($(du -h "$ZIP" | cut -f1))"
+            echo "- CPU: $BENCH"
+            echo
+            echo "Before publishing (docs/RELEASING.md):"
+            echo "1. Look at every skin preview (this run's artifacts)."
+            echo "2. Install **this** zip on a device with its install.sh and smoke-test it: every page and Q-Link, save and reload a project, uninstall."
+            echo "3. CPU: run tools/bench.sh on the device and commit its -j output as \`$VST_DIR/bench.txt\` if it's missing or stale, then re-run this workflow."
+            echo "4. Publish the draft. That creates the tag."
+          } >> "$GITHUB_STEP_SUMMARY"
