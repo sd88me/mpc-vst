@@ -22,11 +22,38 @@ docker run --rm -u "$U" -v "$ROOT":/w -v "$MV":/mv:ro -w /w python:3.11-slim sh 
   "pip install -q --no-warn-script-location --target /tmp/p pillow >/dev/null 2>&1; PYTHONPATH=/tmp/p python3 /mv/tools/gen_vst.py '$PORT/vst.json'"
 
 # 3. the plugin (armhf, glibc 2.36 so it loads on the device's 2.39)
-docker run --rm --platform linux/arm/v7 -u "$U" -v "$ROOT":/b -v "$MV":/mv:ro -w /b arm32v7/gcc:12 bash -euc "
-  gcc -O2 -Wall -Wextra -Wno-unused-parameter -fPIC -shared -fvisibility=hidden -std=gnu11 $CFLAGS -I'$PORT/build' \
-      $SOURCES /mv/wrapper/vst2_wrap.c $LIBS -o '$PORT/build/$SO'
-  strip '$PORT/build/$SO'
-  echo \"exported: \$(readelf --dyn-syms -W '$PORT/build/$SO' | grep -E ' GLOBAL .* [0-9]+ [A-Za-z]' | grep -v UND | awk '{print \$8}' | tr '\n' ' ')\"
-  echo \"highest glibc: \$(readelf -V '$PORT/build/$SO' | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1) (device has 2.39)\"
-"
+# All-C sources (every port so far): unchanged single gcc command (byte-identical Maze builds).
+# Any .cpp source (e.g. a real emulator engine like jv880's): vst2_wrap.c is always plain C
+# (gcc -std=gnu11; it uses void*-to-typed-pointer conversions g++ rejects), so each source compiles
+# separately by its own extension, then everything links with g++ (handles both, pulls in libstdc++).
+case "$SOURCES" in
+  *.cpp*|*.cc*|*.cxx*) CXXPORT=1 ;;
+  *) CXXPORT=0 ;;
+esac
+if [ "$CXXPORT" = 0 ]; then
+  docker run --rm --platform linux/arm/v7 -u "$U" -v "$ROOT":/b -v "$MV":/mv:ro -w /b arm32v7/gcc:12 bash -euc "
+    gcc -O2 -Wall -Wextra -Wno-unused-parameter -fPIC -shared -fvisibility=hidden -std=gnu11 $CFLAGS -I'$PORT/build' \
+        $SOURCES /mv/wrapper/vst2_wrap.c $LIBS -o '$PORT/build/$SO'
+    strip '$PORT/build/$SO'
+    echo \"exported: \$(readelf --dyn-syms -W '$PORT/build/$SO' | grep -E ' GLOBAL .* [0-9]+ [A-Za-z]' | grep -v UND | awk '{print \$8}' | tr '\n' ' ')\"
+    echo \"highest glibc: \$(readelf -V '$PORT/build/$SO' | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1) (device has 2.39)\"
+  "
+else
+  docker run --rm --platform linux/arm/v7 -u "$U" -v "$ROOT":/b -v "$MV":/mv:ro -w /b arm32v7/gcc:12 bash -euc "
+    OBJS=''
+    for f in $SOURCES; do
+      o=\"\${f//\//_}.o\"
+      case \"\$f\" in
+        *.cpp|*.cc|*.cxx) g++ -O2 -Wall -Wextra -Wno-unused-parameter -fPIC -fvisibility=hidden -std=gnu++11 $CFLAGS -I'$PORT/build' -c \"\$f\" -o \"\$o\" ;;
+        *) gcc -O2 -Wall -Wextra -Wno-unused-parameter -fPIC -fvisibility=hidden -std=gnu11 $CFLAGS -I'$PORT/build' -c \"\$f\" -o \"\$o\" ;;
+      esac
+      OBJS=\"\$OBJS \$o\"
+    done
+    gcc -O2 -Wall -Wextra -Wno-unused-parameter -fPIC -fvisibility=hidden -std=gnu11 -I'$PORT/build' -c /mv/wrapper/vst2_wrap.c -o vst2_wrap.o
+    g++ -O2 -shared -fPIC -fvisibility=hidden \$OBJS vst2_wrap.o $LIBS -o '$PORT/build/$SO'
+    strip '$PORT/build/$SO'
+    echo \"exported: \$(readelf --dyn-syms -W '$PORT/build/$SO' | grep -E ' GLOBAL .* [0-9]+ [A-Za-z]' | grep -v UND | awk '{print \$8}' | tr '\n' ' ')\"
+    echo \"highest glibc: \$(readelf -V '$PORT/build/$SO' | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1) (device has 2.39)\"
+  "
+fi
 md5sum "$ROOT/$PORT/build/$SO"
