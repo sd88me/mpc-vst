@@ -303,7 +303,7 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
 
     radii, sliders = set(), set()
     for t, tab in enumerate(tabs_in):
-        controls = []
+        kids, controls = [], []
         for w in tab["widgets"]:
             if w["kind"] not in CONTROL_KINDS:
                 continue
@@ -331,212 +331,187 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                 raise SystemExit("layout: %s has %d options, parameter has %d" % (k, len(w["options"]), len(p.get("options") or [])))
             controls.append(k)
 
-        # Group widgets into segments so each Q-Link bank can show ONLY its own frame(s) as a
-        # genuinely separate screen, not the whole tab with just the Q-Link map changed underneath
-        # -- found on a real device: every bank of a multi-bank tab showed the IDENTICAL screen
-        # (docs/NOTES.md). A "frame" starts a new segment; anything with no enclosing frame yet
-        # gets its own segment too. A readout/stepper/menu marked persistent=1 (tab-level chrome,
-        # e.g. the bank/patch bar added AFTER every frame, meant for every bank regardless of
-        # keys) ALSO gets its own PERSISTENT segment (frame=None) -- but one that ISN'T marked
-        # persistent (e.g. a stepper that's a normal member of the frame right above it, like the
-        # BANKS tab's bank/patch steppers) stays a normal member of the CURRENT frame instead, so
-        # that frame doesn't end up with no real members and get dropped as "irrelevant" to every
-        # bank (found the same way: an offline preview showing the frame missing its own stepper).
-        segments = []
-        cur = None
+        # background: frames + static labels, cropped to the plugin area. ONE shared screen per
+        # TAB, reused by every Q-Link bank -- several qlinks lines just change which params the
+        # physical Q-Link knobs are mapped to (same as any stock multi-bank page), the screen
+        # itself doesn't change. A real per-bank SPLIT SCREEN was tried and reverted after user
+        # feedback: a small tab (e.g. Play/Sends, 17 controls, comfortably fits on one screen) read
+        # as needlessly fragmented, even though it helped a genuinely busy one (docs/NOTES.md). A
+        # future per-tab opt-in split is a plausible follow-up, not a default.
+        bg = "sh_bg_%d" % t
+        script.append("clear|" + PLATE)
         for w in tab["widgets"]:
             if w["kind"] == "frame":
-                cur = {"frame": w, "members": []}
-                segments.append(cur)
-            elif (w["kind"] in ("readout", "stepper", "menu") and w.get("persistent")) or cur is None:
-                segments.append({"frame": None, "members": [w]})
-            else:
-                cur["members"].append(w)
+                if TITLE_FONT and w.get("title"):
+                    script.append("frameblank|%d|%d|%d|%d" % (w["x"], w["y"], w["w"], w["h"]))
+                    title_overlays.append((bg, w["x"], w["y"], w["title"]))
+                else:
+                    script.append("frame|%d|%d|%d|%d|%s" % (w["x"], w["y"], w["w"], w["h"], w.get("title") or "-"))
+            elif w["kind"] in ("readout", "stepper", "menu"):
+                op = "readout" if w["kind"] == "menu" else w["kind"]
+                if w["kind"] in ("readout", "stepper") and w.get("style") == "dotmatrix":
+                    op = "dot" + op
+                script.append("%s|%d|%d|%d|%d|%s" % (op, w["cx"], w["cy"], w["w"], w["h"], w.get("label") or "-"))
+            elif w["kind"] == "list":
+                for (x, y, tw, th) in list_tiles(w):
+                    script.append("tile|%d|%d|%d|%d|%s|%s|0" % (x, y, tw, th, LCD, LINE))
+            script += label_cmds(w)
+        script.append("crop|%s|0|%d|%d|%d" % (art(bg), Y_OFF, W, H))
+        kids.append(_sub("Image", {"version": 2, "imageType": "Regular", "colour": "0", "image": bg + ".png"},
+                         _bounds(0, 0, W, H), "Background"))
+        # Stepper arrow tap-zones: crop the arrow glyph ALREADY drawn into this background (by
+        # widget_stepper/dot_stepper) as the tap-zone's own on/off image. An empty onImage/
+        # offImage ("") makes MPC show a generic placeholder caption ("Button") over the arrow
+        # instead of nothing -- found on a real device (the stepper feature's first hardware test).
+        for w in tab["widgets"]:
+            if w["kind"] != "stepper":
+                continue
+            for side, (ax, ay, aw, ah) in zip(("prev", "next"), stepper_arrows(w)):
+                img = "sh_arrow_%d_%s_%s" % (t, w["key"], side)
+                script.append("crop|%s|%d|%d|%d|%d" % (art(img), ax, ay, aw, ah))
 
-        def member_keys(m):
-            return set(list_keys(m)) if m["kind"] == "list" else {m.get("key")}
-
-        def seg_keys(seg):
-            return set().union(*(member_keys(m) for m in seg["members"])) if seg["members"] else set()
+        for w in tab["widgets"]:
+            kind = w["kind"]
+            if kind not in CONTROL_KINDS:
+                continue
+            i, name = index.get(w["key"], -1), w.get("label", w["key"])
+            if kind == "knob":
+                r = w["r"]
+                s, cw = 2 * r + 10, max(130, 2 * r + 10)   # value label width; LFO knobs sit 138 px apart
+                name_y, name_h = s // 2 + r + 2, 20
+                value_y = name_y + name_h + 2
+                ch = value_y + 26 + 6
+                radii.add(r)
+                key = "shKnob%d" % r
+                defs.setdefault(key, _local(key, [_action("Mouse Down", "Q-Link"),
+                                                  _action("Double Click", "Show Overlay", "knob overlay"),
+                                                  _action("Enter Pressed", "Show Overlay", "knob overlay")], [
+                    _focus(cw, ch),
+                    _sub("Knob", {"version": 5, "knobType": "FilmStrip", "filmStrip": "sh_knob_r%d.png" % r,
+                                  "numFrames": FRAMES - 1, "invert": False, "dragOrientation": "Vertical",
+                                  "handleName": "Data"}, _bounds((cw - s) // 2, 0, s, s), "Knob"),
+                    _name_label(0, name_y, cw, name_h, 17.0, INK),
+                    _sub("Label", {"version": 1, "textStyle": {"version": 1, "font": {"version": 1, "name": "Titillium Web",
+                                                                                     "style": "SemiBold", "height": 22.0},
+                                                               "colour": "ff" + INK_DIM,
+                                                               "justification": "horizontallyCentred verticallyCentred",
+                                                               "case": "Upper Case"},
+                                   "type": "Value", "handleName": "Data"},
+                         _bounds(0, value_y, cw, 26), "Value")]))
+                kids.append(_placed(key, name, i, w["cx"] - cw // 2, w["cy"] - s // 2, cw, ch))
+            elif kind == "toggle":
+                key = "shToggle"
+                if key not in defs:
+                    for on in (0, 1):
+                        script += ["clear|" + under(), "pill|100|100|%d" % on,
+                                   "crop|%s|74|86|53|29" % art("sh_pill_%s" % ("on" if on else "off"))]
+                    defs[key] = _local(key, [_action("Mouse Down", "Q-Link"), _action("Enter Pressed", "Toggle Switch")],
+                                       [_focus(120, 58), _button("sh_pill_on.png", "sh_pill_off.png", 1, 1, 53, 29, 33, 4),
+                                        _name_label(0, 34, 120, 20, 15.0, INK)])
+                kids.append(_placed(key, name, i, w["cx"] - 60, w["cy"] - 18, 120, 58))
+            elif kind == "button":
+                x, y, bw, bh = button_rect(w)
+                img = "sh_btn_%s_%s" % (w["key"], slug(w["label"]))
+                base = w.get("color") or BTN_BG or ACCENT
+                for state, col in (("off", base), ("on", shade(base, 1.35))):
+                    script += ["clear|" + under(), "button|%d|%d|%s|%s" % (w["cx"], w["cy"], col, w["label"]),
+                               "crop|%s|%d|%d|%d|%d" % (art("%s_%s" % (img, state)), x, y, bw, bh)]
+                key = "shTrig_%s_%s" % (w["key"], slug(w["label"]))
+                defs[key] = _local(key, [_action("Mouse Down", "Q-Link"), _action("Enter Pressed", "Toggle Switch")],
+                                   [_focus(bw, bh), _button(img + "_on.png", img + "_off.png", 1, 1, bw, bh)])
+                kids.append(_placed(key, name, i, x, y, bw, bh))
+            elif kind in ("slider_v", "slider_h"):
+                sw_, sh_ = w["w"], w["h"]
+                vert = kind == "slider_v"
+                img = "sh_%s_%dx%d" % (kind, sw_, sh_)
+                sliders.add((img, sw_, sh_, vert))
+                sq = max(sw_, sh_)   # filmstrip frames are square (as stock); padding is transparent
+                cw = max(130, sq)
+                name_y, name_h = (sq - sh_) // 2 + sh_ + 2, 20
+                value_y = name_y + name_h + 2
+                ch = value_y + 26 + 6
+                key = "shSlider_%s_%dx%d" % ("v" if vert else "h", sw_, sh_)
+                defs.setdefault(key, _local(key, [_action("Mouse Down", "Q-Link"),
+                                                  _action("Double Click", "Show Overlay", "knob overlay"),
+                                                  _action("Enter Pressed", "Show Overlay", "knob overlay")], [
+                    _focus(cw, ch),
+                    _sub("Knob", {"version": 5, "knobType": "FilmStrip", "filmStrip": img + ".png",
+                                  "numFrames": FRAMES - 1, "invert": False,
+                                  "dragOrientation": "Vertical" if vert else "Horizontal",
+                                  "handleName": "Data"}, _bounds((cw - sq) // 2, 0, sq, sq), "Slider"),
+                    _name_label(0, name_y, cw, name_h, 17.0, INK),
+                    _value_label(0, value_y, cw, 26, 22.0, INK_DIM)]))
+                kids.append(_placed(key, name, i, w["cx"] - cw // 2, w["cy"] - sq // 2, cw, ch))
+            elif kind == "menu":
+                x, y, rw, rh = w["cx"] - w["w"] // 2, w["cy"] - w["h"] // 2, w["w"], w["h"]
+                key = "shMenu_%dx%d" % (rw, rh)
+                overlay = [_action("Mouse Down", "Show Overlay", "menu overlay"),
+                           _action("Double Click", "Show Overlay", "menu overlay"),
+                           _action("Enter Pressed", "Show Overlay", "menu overlay")]
+                defs.setdefault(key, _local(key, overlay, [_focus(rw, rh), _value_label(8, 0, rw - 16, rh, 26.0, ACCENT)]))
+                kids.append(_placed(key, name, i, x, y, rw, rh))
+            elif kind == "readout":
+                x, y, rw, rh = w["cx"] - w["w"] // 2, w["cy"] - w["h"] // 2, w["w"], w["h"]
+                dot = w.get("style") == "dotmatrix"
+                key = "shReadout_%s%dx%d" % ("dot_" if dot else "", rw, rh)
+                defs.setdefault(key, _local(key, [], [_value_label(8, 0, rw - 16, rh, 26.0, DISPLAY_INK if dot else ACCENT)]))
+                kids.append(_placed(key, name, i, x, y, rw, rh, focus="No"))
+            elif kind == "stepper":
+                x0, y0 = w["cx"] - w["w"] // 2, w["cy"] - w["h"] // 2
+                h = w["h"]
+                dot = w.get("style") == "dotmatrix"
+                # "get=<key>": the text shown can be a DIFFERENT parameter than the one Q-Link
+                # nudges (e.g. show patch_name's text while stepping the numeric preset index) --
+                # see docs/NOTES.md's "shows 0" entry. Bound to its own "Text" handle so it's
+                # independent of "Data" (the stepper's own Q-Link/inc-dec target).
+                gi = index.get(w.get("get"), i) if w.get("get") else i
+                key = "shStepText_%s%dx%d" % ("dot_" if dot else "", w["w"] - 2 * h - 6, h)
+                defs.setdefault(key, _local(key, [_action("Mouse Down", "Q-Link"),
+                                                  _action("Double Click", "Show Overlay", "knob overlay")],
+                                            [_focus(w["w"] - 2 * h - 6, h),
+                                             _value_label(8, 0, w["w"] - 2 * h - 22, h, 26.0, DISPLAY_INK if dot else ACCENT,
+                                                          handle="Text")]))
+                kids.append(_placed(key, name, i, x0 + h + 3, y0, w["w"] - 2 * h - 6, h, extra={"Text": gi}))
+                for side, (ax, ay, aw, ah) in zip(("prev", "next"), stepper_arrows(w)):
+                    aimg = "sh_arrow_%d_%s_%s.png" % (t, w["key"], side)
+                    akey = "shTap_%d_%s_%s" % (t, w["key"], side)
+                    defs.setdefault(akey, _local(akey, [_action("Enter Pressed", "Toggle Switch")],
+                                                 [_button(aimg, aimg, 1, 1, aw, ah)]))
+                    side_key = w.get(side, w["key"] + "_" + side)
+                    kids.append(_placed(akey, "%s %s" % (name, side), index[side_key], ax, ay, aw, ah, focus="No"))
+            elif kind == "list":
+                for slot, ((x, y, tw, th), sk) in enumerate(zip(list_tiles(w), list_keys(w))):
+                    img = "sh_tile_%dx%d" % (tw, th)
+                    for state, border in (("on", 3), ("off", 0)):
+                        script += ["clear|" + under(), "tile|%d|%d|%d|%d|%s|%s|%d" % (x, y, tw, th, LCD, SEG_ON if border else LINE, border),
+                                   "crop|%s|%d|%d|%d|%d" % (art("%s_%s" % (img, state)), x, y, tw, th)]
+                    key = "shRow_%dx%d" % (tw, th)
+                    # the Value label lies over the button and takes the touch, so the row itself toggles on touch
+                    defs.setdefault(key, _local(key, [_action("Mouse Down", "Toggle Switch"), _action("Enter Pressed", "Toggle Switch")],
+                                                [_focus(tw, th), _button(img + "_on.png", img + "_off.png", 1, 1, tw, th),
+                                                 _value_label(12, 0, tw - 24, th, 24.0, ACCENT, "left verticallyCentred")]))
+                    kids.append(_placed(key, "%s %d" % (name, slot + 1), index[sk], x, y, tw, th, focus="Yes" if slot == 0 else "No"))
+            else:  # enum_h / enum_v: radio group, one image button per option
+                n = len(w["options"])
+                for o, (x, y, sw, sh) in enumerate(seg_rects(w)):
+                    img = "sh_seg_%s_%d" % (w["key"], o)
+                    lab = w["options"][o]
+                    for state, fill, ink in (("on", SEG_ON, SEG_ON_TX), ("off", SEG_OFF, INK_DIM)):
+                        script += ["clear|" + under(), "seg|%d|%d|%d|%d|%s|%s|%s" % (x, y, sw, sh, fill, ink, lab),
+                                   "crop|%s|%d|%d|%d|%d" % (art("%s_%s" % (img, state)), x, y, sw, sh)]
+                    key = "shSeg_%s_%d" % (w["key"], o)
+                    defs[key] = _local(key, [_action("Mouse Down", "Q-Link")],
+                                       [_button(img + "_on.png", img + "_off.png", o, n, sw, sh)])
+                    kids.append(_placed(key, "%s %s" % (name, lab), i, x, y, sw, sh, focus="Yes" if o == 0 else "No"))
 
         sets = tab["qlinks"] or [(tab["name"], controls[:16])]
         for sp, (title, keys) in enumerate(sets):
             if len(keys) > 16:
                 raise SystemExit("layout: qlinks %r has %d keys (max 16)" % (title, len(keys)))
-            bank_keys = set(keys)
-            relevant = [seg for seg in segments if seg["frame"] is None or (seg_keys(seg) & bank_keys)]
-            flat = [w for seg in relevant for w in ([seg["frame"]] if seg["frame"] else []) + seg["members"]]
-            kids = []
-            bg = "sh_bg_%d_%d" % (t, sp)
-
-            # background: frames + static labels for THIS BANK ONLY, cropped to the plugin area
-            script.append("clear|" + PLATE)
-            for w in flat:
-                if w["kind"] == "frame":
-                    if TITLE_FONT and w.get("title"):
-                        script.append("frameblank|%d|%d|%d|%d" % (w["x"], w["y"], w["w"], w["h"]))
-                        title_overlays.append((bg, w["x"], w["y"], w["title"]))
-                    else:
-                        script.append("frame|%d|%d|%d|%d|%s" % (w["x"], w["y"], w["w"], w["h"], w.get("title") or "-"))
-                elif w["kind"] in ("readout", "stepper", "menu"):
-                    op = "readout" if w["kind"] == "menu" else w["kind"]
-                    if w["kind"] in ("readout", "stepper") and w.get("style") == "dotmatrix":
-                        op = "dot" + op
-                    script.append("%s|%d|%d|%d|%d|%s" % (op, w["cx"], w["cy"], w["w"], w["h"], w.get("label") or "-"))
-                elif w["kind"] == "list":
-                    for (x, y, tw, th) in list_tiles(w):
-                        script.append("tile|%d|%d|%d|%d|%s|%s|0" % (x, y, tw, th, LCD, LINE))
-                script += label_cmds(w)
-            script.append("crop|%s|0|%d|%d|%d" % (art(bg), Y_OFF, W, H))
-            kids.append(_sub("Image", {"version": 2, "imageType": "Regular", "colour": "0", "image": bg + ".png"},
-                             _bounds(0, 0, W, H), "Background"))
-            # Stepper arrow tap-zones: crop the arrow glyph ALREADY drawn into this background (by
-            # widget_stepper/dot_stepper) as the tap-zone's own on/off image. An empty onImage/
-            # offImage ("") makes MPC show a generic placeholder caption ("Button") over the arrow
-            # instead of nothing -- found on a real device (the stepper feature's first hardware test).
-            for w in flat:
-                if w["kind"] != "stepper":
-                    continue
-                for side, (ax, ay, aw, ah) in zip(("prev", "next"), stepper_arrows(w)):
-                    img = "sh_arrow_%d_%d_%s_%s" % (t, sp, w["key"], side)
-                    script.append("crop|%s|%d|%d|%d|%d" % (art(img), ax, ay, aw, ah))
-
-            for w in flat:
-                kind = w["kind"]
-                if kind not in CONTROL_KINDS:
-                    continue
-                i, name = index.get(w["key"], -1), w.get("label", w["key"])
-                if kind == "knob":
-                    r = w["r"]
-                    s, cw = 2 * r + 10, max(130, 2 * r + 10)   # value label width; LFO knobs sit 138 px apart
-                    name_y, name_h = s // 2 + r + 2, 20
-                    value_y = name_y + name_h + 2
-                    ch = value_y + 26 + 6
-                    radii.add(r)
-                    key = "shKnob%d" % r
-                    defs.setdefault(key, _local(key, [_action("Mouse Down", "Q-Link"),
-                                                      _action("Double Click", "Show Overlay", "knob overlay"),
-                                                      _action("Enter Pressed", "Show Overlay", "knob overlay")], [
-                        _focus(cw, ch),
-                        _sub("Knob", {"version": 5, "knobType": "FilmStrip", "filmStrip": "sh_knob_r%d.png" % r,
-                                      "numFrames": FRAMES - 1, "invert": False, "dragOrientation": "Vertical",
-                                      "handleName": "Data"}, _bounds((cw - s) // 2, 0, s, s), "Knob"),
-                        _name_label(0, name_y, cw, name_h, 17.0, INK),
-                        _sub("Label", {"version": 1, "textStyle": {"version": 1, "font": {"version": 1, "name": "Titillium Web",
-                                                                                         "style": "SemiBold", "height": 22.0},
-                                                                   "colour": "ff" + INK_DIM,
-                                                                   "justification": "horizontallyCentred verticallyCentred",
-                                                                   "case": "Upper Case"},
-                                       "type": "Value", "handleName": "Data"},
-                             _bounds(0, value_y, cw, 26), "Value")]))
-                    kids.append(_placed(key, name, i, w["cx"] - cw // 2, w["cy"] - s // 2, cw, ch))
-                elif kind == "toggle":
-                    key = "shToggle"
-                    if key not in defs:
-                        for on in (0, 1):
-                            script += ["clear|" + under(), "pill|100|100|%d" % on,
-                                       "crop|%s|74|86|53|29" % art("sh_pill_%s" % ("on" if on else "off"))]
-                        defs[key] = _local(key, [_action("Mouse Down", "Q-Link"), _action("Enter Pressed", "Toggle Switch")],
-                                           [_focus(120, 58), _button("sh_pill_on.png", "sh_pill_off.png", 1, 1, 53, 29, 33, 4),
-                                            _name_label(0, 34, 120, 20, 15.0, INK)])
-                    kids.append(_placed(key, name, i, w["cx"] - 60, w["cy"] - 18, 120, 58))
-                elif kind == "button":
-                    x, y, bw, bh = button_rect(w)
-                    img = "sh_btn_%s_%s" % (w["key"], slug(w["label"]))
-                    base = w.get("color") or BTN_BG or ACCENT
-                    for state, col in (("off", base), ("on", shade(base, 1.35))):
-                        script += ["clear|" + under(), "button|%d|%d|%s|%s" % (w["cx"], w["cy"], col, w["label"]),
-                                   "crop|%s|%d|%d|%d|%d" % (art("%s_%s" % (img, state)), x, y, bw, bh)]
-                    key = "shTrig_%s_%s" % (w["key"], slug(w["label"]))
-                    defs[key] = _local(key, [_action("Mouse Down", "Q-Link"), _action("Enter Pressed", "Toggle Switch")],
-                                       [_focus(bw, bh), _button(img + "_on.png", img + "_off.png", 1, 1, bw, bh)])
-                    kids.append(_placed(key, name, i, x, y, bw, bh))
-                elif kind in ("slider_v", "slider_h"):
-                    sw_, sh_ = w["w"], w["h"]
-                    vert = kind == "slider_v"
-                    img = "sh_%s_%dx%d" % (kind, sw_, sh_)
-                    sliders.add((img, sw_, sh_, vert))
-                    sq = max(sw_, sh_)   # filmstrip frames are square (as stock); padding is transparent
-                    cw = max(130, sq)
-                    name_y, name_h = (sq - sh_) // 2 + sh_ + 2, 20
-                    value_y = name_y + name_h + 2
-                    ch = value_y + 26 + 6
-                    key = "shSlider_%s_%dx%d" % ("v" if vert else "h", sw_, sh_)
-                    defs.setdefault(key, _local(key, [_action("Mouse Down", "Q-Link"),
-                                                      _action("Double Click", "Show Overlay", "knob overlay"),
-                                                      _action("Enter Pressed", "Show Overlay", "knob overlay")], [
-                        _focus(cw, ch),
-                        _sub("Knob", {"version": 5, "knobType": "FilmStrip", "filmStrip": img + ".png",
-                                      "numFrames": FRAMES - 1, "invert": False,
-                                      "dragOrientation": "Vertical" if vert else "Horizontal",
-                                      "handleName": "Data"}, _bounds((cw - sq) // 2, 0, sq, sq), "Slider"),
-                        _name_label(0, name_y, cw, name_h, 17.0, INK),
-                        _value_label(0, value_y, cw, 26, 22.0, INK_DIM)]))
-                    kids.append(_placed(key, name, i, w["cx"] - cw // 2, w["cy"] - sq // 2, cw, ch))
-                elif kind == "menu":
-                    x, y, rw, rh = w["cx"] - w["w"] // 2, w["cy"] - w["h"] // 2, w["w"], w["h"]
-                    key = "shMenu_%dx%d" % (rw, rh)
-                    overlay = [_action("Mouse Down", "Show Overlay", "menu overlay"),
-                               _action("Double Click", "Show Overlay", "menu overlay"),
-                               _action("Enter Pressed", "Show Overlay", "menu overlay")]
-                    defs.setdefault(key, _local(key, overlay, [_focus(rw, rh), _value_label(8, 0, rw - 16, rh, 26.0, ACCENT)]))
-                    kids.append(_placed(key, name, i, x, y, rw, rh))
-                elif kind == "readout":
-                    x, y, rw, rh = w["cx"] - w["w"] // 2, w["cy"] - w["h"] // 2, w["w"], w["h"]
-                    dot = w.get("style") == "dotmatrix"
-                    key = "shReadout_%s%dx%d" % ("dot_" if dot else "", rw, rh)
-                    defs.setdefault(key, _local(key, [], [_value_label(8, 0, rw - 16, rh, 26.0, DISPLAY_INK if dot else ACCENT)]))
-                    kids.append(_placed(key, name, i, x, y, rw, rh, focus="No"))
-                elif kind == "stepper":
-                    x0, y0 = w["cx"] - w["w"] // 2, w["cy"] - w["h"] // 2
-                    h = w["h"]
-                    dot = w.get("style") == "dotmatrix"
-                    # "get=<key>": the text shown can be a DIFFERENT parameter than the one Q-Link
-                    # nudges (e.g. show patch_name's text while stepping the numeric preset index) --
-                    # see docs/NOTES.md's "shows 0" entry. Bound to its own "Text" handle so it's
-                    # independent of "Data" (the stepper's own Q-Link/inc-dec target).
-                    gi = index.get(w.get("get"), i) if w.get("get") else i
-                    key = "shStepText_%s%dx%d" % ("dot_" if dot else "", w["w"] - 2 * h - 6, h)
-                    defs.setdefault(key, _local(key, [_action("Mouse Down", "Q-Link"),
-                                                      _action("Double Click", "Show Overlay", "knob overlay")],
-                                                [_focus(w["w"] - 2 * h - 6, h),
-                                                 _value_label(8, 0, w["w"] - 2 * h - 22, h, 26.0, DISPLAY_INK if dot else ACCENT,
-                                                              handle="Text")]))
-                    kids.append(_placed(key, name, i, x0 + h + 3, y0, w["w"] - 2 * h - 6, h, extra={"Text": gi}))
-                    for side, (ax, ay, aw, ah) in zip(("prev", "next"), stepper_arrows(w)):
-                        aimg = "sh_arrow_%d_%d_%s_%s.png" % (t, sp, w["key"], side)
-                        akey = "shTap_%d_%s_%s" % (t, w["key"], side)
-                        defs.setdefault(akey, _local(akey, [_action("Enter Pressed", "Toggle Switch")],
-                                                     [_button(aimg, aimg, 1, 1, aw, ah)]))
-                        side_key = w.get(side, w["key"] + "_" + side)
-                        kids.append(_placed(akey, "%s %s" % (name, side), index[side_key], ax, ay, aw, ah, focus="No"))
-                elif kind == "list":
-                    for slot, ((x, y, tw, th), sk) in enumerate(zip(list_tiles(w), list_keys(w))):
-                        img = "sh_tile_%dx%d" % (tw, th)
-                        for state, border in (("on", 3), ("off", 0)):
-                            script += ["clear|" + under(), "tile|%d|%d|%d|%d|%s|%s|%d" % (x, y, tw, th, LCD, SEG_ON if border else LINE, border),
-                                       "crop|%s|%d|%d|%d|%d" % (art("%s_%s" % (img, state)), x, y, tw, th)]
-                        key = "shRow_%dx%d" % (tw, th)
-                        # the Value label lies over the button and takes the touch, so the row itself toggles on touch
-                        defs.setdefault(key, _local(key, [_action("Mouse Down", "Toggle Switch"), _action("Enter Pressed", "Toggle Switch")],
-                                                    [_focus(tw, th), _button(img + "_on.png", img + "_off.png", 1, 1, tw, th),
-                                                     _value_label(12, 0, tw - 24, th, 24.0, ACCENT, "left verticallyCentred")]))
-                        kids.append(_placed(key, "%s %d" % (name, slot + 1), index[sk], x, y, tw, th, focus="Yes" if slot == 0 else "No"))
-                else:  # enum_h / enum_v: radio group, one image button per option
-                    n = len(w["options"])
-                    for o, (x, y, sw, sh) in enumerate(seg_rects(w)):
-                        img = "sh_seg_%s_%d" % (w["key"], o)
-                        lab = w["options"][o]
-                        for state, fill, ink in (("on", SEG_ON, SEG_ON_TX), ("off", SEG_OFF, INK_DIM)):
-                            script += ["clear|" + under(), "seg|%d|%d|%d|%d|%s|%s|%s" % (x, y, sw, sh, fill, ink, lab),
-                                       "crop|%s|%d|%d|%d|%d" % (art("%s_%s" % (img, state)), x, y, sw, sh)]
-                        key = "shSeg_%s_%d" % (w["key"], o)
-                        defs[key] = _local(key, [_action("Mouse Down", "Q-Link")],
-                                           [_button(img + "_on.png", img + "_off.png", o, n, sw, sh)])
-                        kids.append(_placed(key, "%s %s" % (name, lab), i, x, y, sw, sh, focus="Yes" if o == 0 else "No"))
-
             ql = {"Q-Link %d" % (q + 1): -1 for q in range(16)}
             for s, k in enumerate(keys):
+                if k not in index:
+                    raise SystemExit("layout: qlinks key %r is not a parameter" % k)
                 ql["Q-Link %d" % qlink_for_slot(s)] = index[k]
             comp = "%s|%s" % (tab["name"], title)
             pages.append({"version": 3, "tabName": title, "fnKeyIndex": t, "fnKeySubIndex": sp,
