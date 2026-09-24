@@ -41,13 +41,12 @@ jobs:
       version: ${{ inputs.version }}
       tools_ref: <sha>                 # the same commit
       vst_dir: vst                     # the build writes vst/build/<so>, skin/, pluginlist-entry.xml
-      build: vst/build.sh              # run from the port repo root; MPC_VST and FORCE_SHADOW are set
+      build: vst/build.sh              # run from the port repo root; MPC_VST is set
       host_test: '"$MPC_VST/tools/test_port.sh" vst/vst.json'   # optional
       about: One line about the plugin.
       dry_run: ${{ inputs.dry_run }}   # optional: zip and previews as run artifacts only
 ```
-Optional inputs: `extra` (release.py `--extra` specs), `zig` (a zig version to install) and `force_shadow_ref`
-(default `main`). The run's artifacts hold the zip and one PNG per skin page, and its summary lists what is left
+Optional inputs: `extra` (release.py `--extra` specs) and `zig` (a zig version to install). The run's artifacts hold the zip and one PNG per skin page, and its summary lists what is left
 to do. CPU (step 4) comes from `<vst_dir>/bench.txt` when the port commits the `-j` output of `tools/bench.sh`;
 without it INSTALL.md has no CPU section. Re-running with the same version replaces the draft's zip. It refuses a
 version that is already published. Publishing the draft creates the tag.

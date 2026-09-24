@@ -39,7 +39,8 @@ See [docs/NOTES.md](docs/NOTES.md) for details, gotchas, and open issues, and [d
   (`shadow_page.conf` widget syntax: frames, knobs, toggles, triggers, option segments, plus
   `qlinks` lines for nested pages). The artwork (backgrounds, knob filmstrips, button states) is drawn by
   [force-shadow](https://github.com/sd88me/force-shadow)'s own renderer, so the MPC page matches the
-  shadow page pixel for pixel. Needs a force-shadow checkout to build `shadow_art`.
+  shadow page pixel for pixel. That renderer is vendored in `tools/vendor/force-shadow/`, so no force-shadow
+  checkout is needed.
 - `tools/studio.py` + `tools/skin_template.svg`: the skin studio. Auto-layout from a port's
   parameters, an Inkscape/Penpot SVG round trip, and page previews. See [docs/SKIN_STUDIO.md](docs/SKIN_STUDIO.md).
 - `tools/bench.sh` + `tools/bench.c`: a CPU stress test run on the device, with a PASS/WARN/FAIL verdict for Gen1
