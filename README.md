@@ -7,7 +7,7 @@ skin** and Q-Link mapping. There's no LD_PRELOAD, no JACK bridge, and no separat
 
 Status: proof of concept, working on real hardware (2026-09-23, verified on a Force):
 a gain effect, a test synth, and [Maze Voice](https://github.com/sd88me/force-maze)
-(a full Schwung DSP port) all play from pads/sequencer, with custom skins and Q-Links.
+(a full synth engine port) all play from pads/sequencer, with custom skins and Q-Links.
 It should behave the same on other Gen1 MPC OS hardware, since the same `MPC` binary is involved; reports are welcome.
 Gen2 devices (e.g. Live III) are reported to be more locked down.
 
@@ -28,17 +28,19 @@ See [docs/NOTES.md](docs/NOTES.md) for details, gotchas, and open issues.
 
 ## Layout
 
-- `wrapper/vst2_wrap.c`: a generic VST2 ⇄ Schwung `plugin_api_v2` wrapper. You link
-  it with any Schwung DSP plus a generated `params.h`.
-- `tools/build_port.sh` + `tools/gen_vst.py`: the generic port builder. A Schwung module ports with one small
-  `vst.json` (name, uid, sources, optional layout) and no code: `tools/build_port.sh path/to/vst.json` makes the
+- `wrapper/vst2_wrap.c` + `wrapper/engine.h`: a generic VST2 wrapper around a small engine interface
+  (create, MIDI, string parameters, 128-frame int16 render). Link it with any engine plus a generated `params.h`.
+- `adapters/`: engines written for other hosts, mapped onto that interface without code changes
+  (`adapters/schwung/`).
+- `tools/build_port.sh` + `tools/gen_vst.py`: the generic port builder. An engine ports with one small
+  `vst.json` (name, uid, parameters, sources, optional layout) and no wrapper code: `tools/build_port.sh path/to/vst.json` makes the
   `.so`, the skin and the `pluginList` entry. See [docs/PORTING.md](docs/PORTING.md).
 - `tools/shadow_skin.py` + `tools/shadow_art.c`: build a skin from a Force Shadow style layout
   (`shadow_page.conf` widget syntax: frames, knobs, toggles, triggers, option segments, plus
   `qlinks` lines for nested pages). The artwork (backgrounds, knob filmstrips, button states) is drawn by
   [force-shadow](https://github.com/sd88me/force-shadow)'s own renderer, so the MPC page matches the
   shadow page pixel for pixel. Needs a force-shadow checkout to build `shadow_art`.
-- `tools/studio.py` + `tools/skin_template.svg`: the skin studio. Auto-layout from a module's
+- `tools/studio.py` + `tools/skin_template.svg`: the skin studio. Auto-layout from a port's
   parameters, an Inkscape/Penpot SVG round trip, and page previews. See [docs/SKIN_STUDIO.md](docs/SKIN_STUDIO.md).
 - `tools/bench.sh` + `tools/bench.c`: a CPU stress test run on the device, with a PASS/WARN/FAIL verdict for Gen1
   hardware. See [docs/BENCH.md](docs/BENCH.md).

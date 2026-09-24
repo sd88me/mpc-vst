@@ -1,6 +1,6 @@
 ---
 name: mpc-vst-plugin
-description: Build, skin, register and test native VST2 plugins for the built-in JUCE plugin host of Akai MPC OS standalone devices (MPC Live/One/X/Key, Force) — porting Schwung DSP modules or other engines to real track instruments/effects with native MPC screen skins (TUI.json) and Q-Links. Use whenever the task mentions MPC/Force VST, mpc-vst-plugins, pluginList-arm, MPC.settings plugin entries, plugin skins/TUI.json, /sdcard/Synths, or porting something "as a plugin" / "native instrument" on MPC or Force.
+description: Build, skin, register and test native VST2 plugins for the built-in JUCE plugin host of Akai MPC OS standalone devices (MPC Live/One/X/Key, Force) — porting synth/effect engines to real track instruments/effects with native MPC screen skins (TUI.json) and Q-Links. Use whenever the task mentions MPC/Force VST, mpc-vst-plugins, pluginList-arm, MPC.settings plugin entries, plugin skins/TUI.json, /sdcard/Synths, or porting something "as a plugin" / "native instrument" on MPC or Force.
 ---
 
 
@@ -14,12 +14,16 @@ the user for it. **Ask before restarting MPC** (`systemctl restart acvs`), becau
 Stop any separately attached audio engines first.
 
 ## Pipeline
-1. **DSP**: a Schwung `plugin_api_v2` module links against `wrapper/vst2_wrap.c` + generated
-   `params.h` → one `.so` exporting only `VSTPluginMain` (+ DSP init). The Force runs at 44.1k/128 frames,
-   the same as the Move, so no DSP changes are needed. Compile out Move-only quirks with a `-D<NAME>_VST` flag
-   (e.g. Maze's notes 0..9 knob-touch filter).
+1. **Engine**: anything providing `mpc_engine()` (`wrapper/engine.h`: create/destroy/midi/set_param/get_param/
+   render, 44.1 kHz int16 stereo in 128-frame blocks, the Force's own period) links against `wrapper/vst2_wrap.c`
+   + generated `params.h` → one `.so` exporting `VSTPluginMain`. Compile out host-specific quirks with a
+   `-D<NAME>_VST` flag. An engine written for another host comes in through `adapters/<name>/`.
+   **Vendor third-party engine source into the port's own repo (committed), never `git clone` it at build
+   time into a gitignored scratch dir** -- see docs/PORTING.md's Quick Start for the full rationale/pattern
+   (`mpc-vst-dx7`'s `src/VENDORED.md` is the worked example: vendored commit, license, and exactly what was
+   changed locally so a future re-vendor is a real diff).
 2. **Generate + build**: `tools/build_port.sh <port>/vst.json` (steps 2-3 in one; Docker). `gen_vst.py` makes the
-   params table from `module.json` chain_params (VST index = order), the skin folder `<vendor> - VST - <name>/`
+   params table from the port's parameter list (`tools/params.py`; VST index = order), the skin folder `<vendor> - VST - <name>/`
    (from vst.json's `layout`, else a studio auto-layout) and `pluginlist-entry.xml`. The compile uses
    `arm32v7/gcc:12` (glibc ≤ 2.39), `-fvisibility=hidden -shared -fPIC`, and links `wrapper/vst2_wrap.c` from this repo.
 3. **Bench**: `tools/bench.sh build/x.so <ip>` must PASS before release (docs/BENCH.md).
@@ -30,23 +34,31 @@ Stop any separately attached audio engines first.
 6. **Register** (needs MPC restart, **ask the user first**, and stop attached voice engines such as dx7_host/maze_host first):
    stop acvs → back up `MPC.settings` → insert the `<PLUGIN …/>` line before `</KNOWNPLUGINS>` (first time:
    add a whole `<VALUE name="pluginList-arm"><KNOWNPLUGINS>…</KNOWNPLUGINS></VALUE>` before `</PROPERTIES>`)
-   → start acvs → check force_shadow.so is still in MPC's environ. An `.so` update alone (same path) needs only a
-   restart, not a settings edit. A skin-only change needs **no restart**: swap the folder, then re-insert the
+   → start acvs → check force_shadow.so is still in MPC's environ. An `.so` update alone (same path) needs no settings
+   edit and no restart: remove every instance of the plugin, then insert it again (verified 2026-09-24). A skin-only change needs **no restart**: swap the folder, then re-insert the
    plugin or reload the project.
 7. The user tests on the device: plugin list → insert → play → edit screen → Q-Links → save/reload project.
 
 ## Gotchas
 - AEffect magic `'VstP'` 0x56737450 (the forum PoC's value is wrong).
 - `effGetParamName` / `effGetParamDisplay`: JUCE gives large buffers, but still cap your copies.
-- Enum params: send the index as a number string to Schwung `set_param`; map `get_param` labels back.
+- Enum params: the wrapper sends the option index as a number string to the engine's `set_param` and maps
+  `get_param` labels back.
+- A shared library links with unresolved symbols and then crashes MPC on load; `build_port.sh` links with
+  `-Wl,--no-undefined` so a missing engine/adapter symbol fails the build instead.
 - Skin `importFiles`/images: absolute `/usr/share/Akai/Content/Synths/...` paths.
 - Never commit/publish Akai's stock skin JSON/PNGs; only describe them.
 
 ## Skin components (verified; details in mpc-vst docs/NOTES.md)
 - Names: `Label` with `"type": "Name"`; values: `"type": "Value"`. Stock knobs draw no name.
 - Option params: radio group of image `Button`s (`buttonId` i, `numButtonsInGroup` N, same param), with option text
-  drawn into our own PNGs. `comboBox` menus open EMPTY for VST2 params, so don't use them.
-- Off/on: one `Button` + "Enter Pressed → Toggle Switch". Triggers (`access:"write"`): the wrapper sends
+  drawn into our own PNGs, or a layout `popup` (a field whose tap shows a drawn list; hidden `<key>__open` param).
+  `comboBox` menus open EMPTY for VST2 params (even with a valid `.vstxml`), so don't use them.
+- Conditional visibility: `bounds.additionalInvalidatingHandles: ["IndexedEnabling/<i>/<N>/Parameter <p>"]` shows a
+  component only while param p (as an N-way choice) is at index i. Works for VST2 params; basis of `popup`.
+- Live text fonts: only `Titillium Web` and `Roboto` (any weight/size) resolve; anything else falls back to
+  Titillium. Other typefaces must be baked into PNGs.
+- Off/on: one `Button` + "Enter Pressed → Toggle Switch". Triggers (`momentary`): the wrapper sends
   `audioMasterAutomate` 0 after firing so the highlight drops. The wrapper steps options on Q-Link nudges.
 - Q-Links: grid numbered bottom-up; Force knob bank 1 = Q-Links 13,9,5,1,14,10,6,2 and bank 2 = those +2.
 - Nested pages: same `fnKeyIndex`, `fnKeySubIndex` 0..n; Q-Link map `Tab`/`SubTab` are 1-based.
@@ -69,17 +81,32 @@ Put a `layout.conf` next to the port's vst.json (Maze: `force-maze/maze-voice/vs
 shadow_page.conf widget syntax plus `qlinks "PAGE" = key,...` lines (each one is a nested page with the same design and
 its own Q-Links) and `rows=` on enum_h, and set `"layout"` in vst.json. gen_vst.py then calls `shadow_skin.py` (mpc-vst/tools), which drives
 `shadow_art` (built from `shadow_art.c` with `-I<force-shadow>/tools`, since it #includes render_conf_preview.c) to draw
-backgrounds, knob filmstrips and button states. Shadow y−86 = skin y. Option counts must match module.json.
-Check offline before deploying: composite TUI.json + PNGs into a preview image (paste each component at its bounds)
-and look at it. Skin-only changes need no restart.
+backgrounds, knob filmstrips and button states. Shadow y−86 = skin y. Option counts must match the parameter's own.
+
+**Copy the theme first, every time.** If the app being ported has its own `addon/shadow_page.conf`,
+copy its `style=`/`theme_*` lines verbatim to the top of the new `layout.conf` **before** laying out any
+controls. `shadow_skin.py` sends the whole layout file to `shadow_art` as `theme|<layout.conf>`, which
+applies it exactly like force-shadow's on-device renderer (full `theme_*` key set: bg, knob face/ring,
+button colours, segments, everything) -- not just the handful of keys Python uses for label text. Skip
+this and the build still succeeds, the layout is still correct, and the skin still *renders* -- it just
+comes out in `shadow_art`'s generic default palette (cream knobs, dark plate, orange accent) instead of
+the app's real look, and that's easy to miss without comparing side-by-side (verified 2026-09-24 porting
+force-acid: theme-less first pass looked "plausible" until checked against the shadow page's own
+look -- yellow chassis, red buttons, dark knobs -- see mpc-vst/docs/NOTES.md). No shadow page to copy
+from: pick theme colours on purpose instead of leaving the default.
+
+Check offline before deploying: composite TUI.json + PNGs into a preview image (`tools/studio.py preview`)
+and look at it -- and if the app has a real screenshot/mockup (its `docs/*.png`, or its own shadow
+page's look), compare against *that*, not just "does this look like a plausible skin". Skin-only changes
+need no restart.
 
 ## Param opt-ins beyond a plain knob (added porting jv880; details + rationale in docs/NOTES.md)
-`module.json` chain_params entries feeding `gen_vst.py` can carry:
+Parameter entries feeding `gen_vst.py` (`tools/params.py` format) can carry:
 - `"display": "string"` -- `param_t.string_display`: the wrapper passes `get_param`'s text straight to
   `effGetParamDisplay` instead of `atof()`-reformatting it. Needed for any readout that's a name/label, not
   a number (bank/patch names) -- without it the text collapses to "0".
 - `"display": "int"` -- `param_t.int_display`: forces a whole-number `%.0f` instead of one decimal place.
-- `"step_of": "<key>", "step_delta": N` on a `"kind": "trigger"` param -- `param_t.step_target`/`step_delta`:
+- `"step_of": "<key>", "step_delta": N` on a `"momentary": true` param -- `param_t.step_target`/`step_delta`:
   a stepper arrow that nudges a DIFFERENT param by reading its live DSP value and writing back `+N`, clamped
   to that param's declared min/max. Use when the DSP has no native `_prev`/`_next` verb for the value you
   want to step (jv880's `preset`: no such verb existed, so `preset_next`/`preset_prev` silently did nothing

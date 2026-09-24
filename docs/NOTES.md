@@ -14,7 +14,7 @@ from the Force and may differ on MPC Live/One/X/Key (e.g. `Force Documents` vs `
   version="1.0" file="/sdcard/vst/x.so" uid="<hex uniqueID>" isInstrument="0|1" fileTime="0"
   infoUpdateTime="0" numInputs="2" numOutputs="2" isShell="0"/>`
 - Device: armv7l, glibc 2.39 (build with an older glibc, e.g. `arm32v7/gcc:12` docker = 2.36).
-- Audio: 44100 Hz, 128-frame period, which is identical to the Move/Schwung, so DSP runs unmodified.
+- Audio: 44100 Hz, 128-frame period; the engine interface (`wrapper/engine.h`) renders in exactly those blocks.
 - AEffect magic must be `'VstP'` (0x56737450). **The forum snippet's magic is wrong.**
 - Instruments: set `effFlagsIsSynth`, category 2, answer `effCanDo "receiveVstEvents"`;
   MIDI arrives via `effProcessEvents`.
@@ -46,7 +46,7 @@ from the Force and may differ on MPC Live/One/X/Key (e.g. `Force Documents` vs `
    art. We add `Label` `"type": "Name"`. Original note: **Some knobs on a page show blank** while their Q-Link works. Suspect: a missing `Label`
    component (stock skins add Labels and `Focus` overlays), or knob bounds/`showWhenDataModelInvalid`.
    Compare the rendered page against Bassline's component set.
-3. Note timing is quantised to 128-frame DSP blocks (same as Move).
+3. Note timing is quantised to 128-frame DSP blocks.
 4. ~~`gen_vst.py` is Maze-specific.~~ Done 2026-09-24: `tools/build_port.sh` + a per-port `vst.json`; Maze builds through
    it byte-identically (same `.so` md5).
 5. Maze's knob-touch note filter (notes 0..9) is compiled out with `-DMAZE_VST=1`, which is built but
@@ -177,7 +177,7 @@ string through `atof()` + `snprintf("%.*f", ...)` -- fine for a real numeric dis
 it silently destroys any non-numeric string (a bank name, a patch name, a status message) down to
 whatever leading digits `atof` can parse, which for text like "Preset A" or "A.Piano 1" is nothing,
 hence the field just showed "0". Fixed with an explicit opt-in: `param_t` gained a `string_display`
-field (`gen_vst.py`, from a chain_params entry's `"display": "string"`), and `effGetParamDisplay`
+field (`gen_vst.py`, from a parameter entry's `"display": "string"`), and `effGetParamDisplay`
 copies the DSP's string straight through when it's set instead of reformatting it. Verified against
 real ROMs on x86 (`patch_name` -> `'A.Piano 1   '`, `bank_name` -> `'Preset A'`) before redeploying.
 A second, related bug: a `stepper`'s displayed text was hardcoded to the SAME parameter it Q-Link
@@ -381,6 +381,66 @@ something a real, external, VST2-loaded plugin (including ours) structurally can
 since that path never calls `effGetParameterProperties`. Conclusion unchanged: for a real plugin, the
 native picker is not available — this only rules out one theory for why *stock* skins can use it.
 
+**Retest with a correct `.vstxml` (2026-09-24): still empty.** The first probe's `.vstxml` was malformed for
+JUCE: `juce::VSTXMLInfo` (compiled into `/usr/bin/MPC`, as are `VSTParametersStructure`/`numberOfStates`)
+only parses children of `<VSTParametersStructure>`, and the `<ValueType>` sat outside it, with no
+`numberOfStates`. Fixed file (`poc/menuprobe.vstxml`, ValueType inside, `numberOfStates="4"`, plus a
+states-only param) **was** read: MPC called `effGetParamName` only for the one param not in the xml, so JUCE
+took names (and so the value strings) from it. All four menus still opened empty. So MPC's menu overlay
+does not use JUCE's hosted-parameter value strings for a VST2 param; the list only exists for MPC's internal
+instruments. Don't retry `.vstxml` / parameter properties.
+
+## Conditional visibility works for VST2 params: `IndexedEnabling` (tested 2026-09-24, `poc/menuprobe_skin.py`)
+A component's `bounds.additionalInvalidatingHandles: ["IndexedEnabling/<i>/<N>/Parameter <p>"]` shows it
+only while parameter p, read as an N-way choice, is at index i (stock use: AIR Amp Sim swaps its whole
+background image per amp model; also AIR Diff Delay, TouchFX, Hype's GUI-Popout). On the probe, four stacked
+Value labels per param with `IndexedEnabling/0..3/4/Parameter p` showed exactly one at a time, following the
+knob, for both a param with `.vstxml` states and one without — so MPC computes the index from the skin's N
+and the normalized value itself; the plugin needs no metadata. Stock skins pair it with
+`showWhenDataModelInvalid: "Show"`. Opens up: mode-dependent panels (show a different control set per osc
+type), pictures that follow a value (per-waveform image), and a self-drawn pop-up picker (a hidden "open"
+param toggled by tapping the field, an option list visible only while it's open).
+
+**Pop-up picker prototype: works (2026-09-24, probe's PICKER tab).** Field = local component with
+`Mouse Down`/`Enter Pressed` → `Toggle Switch` on the "open" param (Data handle), showing the enum's value via
+a second `Text` handle. Panel image + one radio-group `Button` per option (bound to the enum), all with
+`IndexedEnabling/1/2/Parameter <open>` and placed after the other page components. On device: tap opens it;
+a visible panel takes the touch over a control underneath (no pass-through); a hidden panel takes no touches.
+Auto-close: the plugin clears "open" when the enum is set while open and reports it with
+`audioMasterAutomate(open, 0)` from `processReplacing` (not from inside `setParameter`); MPC re-evaluates the
+visibility and the panel closes. Caveat: a Q-Link nudge of the enum while open also closes it (the plugin
+can't tell a touch from a Q-Link).
+
+**Now a layout control: `popup` (2026-09-25).** `shadow_skin.py` `popup cx= cy= w= h= key=<enum> [cols=]`;
+the list opens below the field, else above, adding columns until it fits. `gen_vst.py` appends a hidden
+`<key>__open` param (`popup_of` in params.h); `vst2_wrap.c` keeps it locally (not sent to the DSP, not in the
+chunk) and closes it only on an exact option value, so a Q-Link nudge (between options) leaves it open.
+**Verified on the Force 2026-09-25** (Maze Voice test build, LFO1 SYNC DIV as an 8-option popup): opens as a
+two-column list under the field, a pick closes it and shows the choice, a Q-Link turn steps the value with the
+list left open.
+
+## Patching MPC's own picker: not practical (checked 2026-09-25)
+`/usr/bin/MPC` links JUCE statically and is stripped (no `.symtab`); of ~8000 exported dynamic symbols none
+names a menu/overlay/combo/parameter class (only ~92 JUCE-related, all typeinfo/vtables of unrelated
+templates). So `LD_PRELOAD` interposition can't reach the code that fills the menu overlay; the only route
+would be reverse-engineering the 73 MB `.text` and patching it in memory per firmware build — crash risk to
+MPC and breaks on every update. The skin-drawn `popup` covers the need.
+
+## `.so` update without restarting MPC (verified 2026-09-24, menuprobe)
+Replacing `/sdcard/vst/x.so` (staged `.new` + `mv`) and then removing **every** instance of the plugin and
+inserting it again loaded the new build (version line in the probe log), no MPC restart. JUCE drops the module
+once its last instance is gone and re-opens it on the next insert. A restart is still needed for a new
+`MPC.settings` entry.
+
+## Skin fonts: Titillium Web + Roboto only (tested 2026-09-24, `poc/menuprobe_skin.py`)
+`Label` components name their font per component (`textStyle.font.name/style/height`). Stock skins use
+`Titillium Web` (Regular/SemiBold/Light/Italic…) and `Roboto` (Regular/SemiBold); both are embedded in
+`/usr/bin/MPC` in every weight, and both render. `Liberation Mono`/`Liberation Serif` (installed in
+`/usr/share/fonts/ttf`, a fontconfig dir) and a bogus name all fell back to Titillium, so MPC does not resolve
+system fonts by name and installing a `.ttf` on the device won't give skins a new native font. Choice for
+live (value/name) text: those two families at any weight/size. Any other typeface has to be baked into PNGs
+(`vst.json` `"title_font"`).
+
 ## VST3: not supported by MPC OS (checked on a Force, OS base 5.0.17, 2026-09-24, `tools/probe_device.sh`)
 MPC's JUCE host has only `juce::VSTPluginFormat` compiled in. The binary has no `VST3PluginFormat` /
 `VST3PluginInstance` RTTI and no `GetPluginFactory` string (which JUCE needs to load any VST3 module), and no LV2
@@ -390,10 +450,10 @@ Rerun the probe after firmware updates and on other models.
 
 ## MIDI-generator VST wrapping a standalone-process engine (Force Acid, 2026-09-24)
 Force Acid (`force-acid`, a MockbaMod standalone process using RtMidi + a timer thread as its own
-"chain host" for `acid_core.c`, midi_fx_api_v1) ports to a VST2 the same way as a plugin_api_v2 DSP for
+"chain host" for `acid_core.c`) ports to a VST2 the same way as a block-rendering engine for
 the MIDI-out and clock problems, but needed a hand-written wrapper (`force-acid/vst/acid_vst.cpp`, not
 `wrapper/vst2_wrap.c`, which assumes `render_block` audio DSP): `tools/gen_vst.py` still generates
-params.h + the skin from a synthetic module.json (`chain_params` hand-transcribed from the standalone
+params.h + the skin from a hand-written parameter file (transcribed from the standalone
 build's CC table, kept in sync by hand) since that pipeline only cares about the key/name/min/max/options/
 momentary shape, not the real host API.
 - **Clock, without a physical MIDI cable:** the standalone build derives BPM/transport from real 0xF8/
@@ -401,7 +461,7 @@ momentary shape, not the real host API.
   `audioMasterGetTime` gives exact `tempo` and `ppqPos` already, so the wrapper synthesizes the same
   24-PPQN clock byte stream from the ppqPos delta each block (`ceil(last/step)*step .. end`, step =
   1/24 quarter note) and feeds it to the engine's own `process_midi()` unchanged -- no core changes
-  needed, exactly the "no new code in the core" case DESIGN.md describes for the Move->Force port.
+  needed.
 - **Host API with no instance argument** (`host_api_v1_t.get_bpm`/`get_clock_status`, acid_core.h): fine
   to leave process-wide (one set of atomics, `move_midi_fx_init` called once), since MPC has one shared
   transport for every plugin instance anyway -- matches host_shim.cpp's own simplification.
@@ -447,8 +507,8 @@ Unix control socket -- see `force-dx7/src/dx7_host.cpp`) to `force-dx7/vst/` in 
 Not built through `tools/build_port.sh`/`wrapper/vst2_wrap.c` (no directly-linkable DSP
 module here, category 2 of docs/PORTING.md): a port-specific wrapper, `force-dx7/vst/
 dx7_vst.c`, plus its own `build.sh`, `gen_params.py`, `params.json` (152 params, hand-derived
-from `addon/shadow_page.conf`'s full control surface -- module.json's own chain_params only
-lists a curated ~20, the Move-style "knobs" subset, not the full per-operator surface a
+from `addon/shadow_page.conf`'s full control surface -- the engine's own parameter list only
+has a curated ~20 knob-level params, not the full per-operator surface a
 Force page/VST would want) and `layout.conf` (theme + GLOBAL/OP1-6 tabs copied from
 shadow_page.conf; the BANKS tab was dropped -- its `list` widgets scan a live bank/patch
 folder, which has no static-VST-parameter analogue).
