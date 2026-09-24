@@ -113,6 +113,113 @@ plugin calls `audioMasterUpdateDisplay` (opcode 42). So readouts (status, time, 
 result lists can be plain parameters whose display text the plugin changes. Name changes without
 UpdateDisplay are untested; call it whenever a name changes.
 
+## Skin studio text: readability findings (2026-09-24, building the jv880 port)
+- `label_cmds()`'s baked text (knob/toggle/slider/enum_h/enum_v names) and `shadow_art.c`'s
+  `seg`/`button` commands, plus `render_conf_preview.c`'s `frame_box()`/`widget_button()` titles, all
+  used a fixed 1.5x scale on the 9x9 bitmap font (`font8x8.h`). That font DOES have lowercase
+  (`font_chars` includes a-z), but converted layouts that kept the original all-caps shadow_page.conf
+  labels ("CUTOFF", "TVF DEPTH") at 1.5x read as too wide/shouty. Fixed by lowering the scale to 1.15
+  everywhere it's used (`shadow_skin.py`'s `LABEL_SCALE`/`text_width`, `shadow_art.c`'s `seg` command,
+  and `render_conf_preview.c`'s `frame_box()`/`widget_button()`) and switching generated label/title/
+  option text to Title Case (an acronym allowlist keeps e.g. LFO/TVF/FXM from becoming "Lfo"/"Tvf").
+  `render_conf_preview.c` is mpc-vst's actual skin-asset renderer (shadow_art.c `#include`s it), not a
+  preview-only tool here, but it's a separate hand-ported copy from force_shadow.c's own on-device
+  renderer, so this change doesn't touch the real Force's live rendering.
+- A long `enum_h` option row (e.g. an 8-option reverb TYPE) reads cramped in one row; wrapping to
+  `rows=2` (already-supported layout.conf syntax) once options exceed ~6 fixes it.
+- An `env`-style bar/knob group (or any control whose *component bounding box* is taller than its own
+  visible art, e.g. a slider's box padded for its value-label text below) must be positioned by that
+  box's real height, not by eyeballing the visible art's center — sizing off a frame's own content
+  area (skip its title+divider band, ~44px) and computing the component center from the box height
+  keeps it from poking into the frame's title text. Diagnosed by comparing a skin's baked `sh_bg_N.png`
+  (correct) against `tools/studio.py preview`'s composited output (showed the corruption) — the studio.py
+  preview pastes each component's real filmstrip art at its real bounds, so it catches oversized-bounds
+  bugs invisible in the background PNG alone.
+
+## Control names: native Label "Name" beats baked bitmap text (2026-09-24)
+The font-scale/Title-Case fixes above (previous entry) still read as "monospace" for real words:
+`font8x8.h`'s glyphs mostly fill their whole 9-column cell, so trimming the advance to each glyph's
+actual ink width (also tried) barely helped -- the letterforms themselves are blocky pixel art, not a
+real typeface, so no amount of scale/advance tuning gets genuinely "normal typed font" spacing out of
+it. The real fix: MPC's own native `Label` `"type": "Name"` component (same mechanism as the existing
+`"type": "Value"` one) shows the assigned parameter's name using MPC's own on-device Titillium Web
+font -- real proportional metrics, rendered by the device itself, zero relation to shadow_art.c's
+baked font. `shadow_skin.py`'s knob/toggle/slider_v/slider_h defs now include a `_name_label()` sub
+alongside the existing `_value_label()`; `label_cmds()` no longer bakes text for those three kinds
+(it still does for frame titles and enum_h/enum_v's own group label + per-option segment text, none of
+which bind to a single parameter index the way Name/Value can).
+Consequence: `tools/studio.py preview` couldn't show this at all (it only drew an outline box for any
+`Label`, since it has no access to a real on-device font) -- upgraded it to render actual text for
+`Name` labels via Pillow's own bundled scalable font (`ImageFont.load_default(size=...)`, present in
+Pillow 10.1+; the `python:3.11-slim` container's `pip install pillow` pulls a recent enough one). Not
+pixel-identical to Titillium Web, but proportional and good enough to sanity-check spacing/overlap
+offline before ever touching a device.
+
+## String-valued display params showed "0" (2026-09-24, jv880: bank/patch name readouts)
+`vst2_wrap.c`'s `effGetParamDisplay` unconditionally reformatted every parameter's `get_param()`
+string through `atof()` + `snprintf("%.*f", ...)` -- fine for a real numeric display ("63.5"), but
+it silently destroys any non-numeric string (a bank name, a patch name, a status message) down to
+whatever leading digits `atof` can parse, which for text like "Preset A" or "A.Piano 1" is nothing,
+hence the field just showed "0". Fixed with an explicit opt-in: `param_t` gained a `string_display`
+field (`gen_vst.py`, from a chain_params entry's `"display": "string"`), and `effGetParamDisplay`
+copies the DSP's string straight through when it's set instead of reformatting it. Verified against
+real ROMs on x86 (`patch_name` -> `'A.Piano 1   '`, `bank_name` -> `'Preset A'`) before redeploying.
+A second, related bug: a `stepper`'s displayed text was hardcoded to the SAME parameter it Q-Link
+steps (e.g. jv880's numeric `preset` index), when the design wants a DIFFERENT parameter's text
+(`patch_name`) shown instead. Fixed by giving `stepper` an optional `get=<key>` attribute (mirroring
+Force Shadow's own shadow_page.conf attribute of the same name, dropped during the jv880 conversion)
+that binds the text label to its own `"Text"` handle (`_placed()`'s `extra=` param) independent of
+the stepper's own `"Data"` handle -- so the arrows/Q-Link still nudge `preset`, but the center text
+shows `get_param("patch_name")`.
+
+## bench.sh understates real cost for plugins with a real-time-paced background thread (2026-09-24)
+jv880's real synthesis work happens on its own thread (`jv880-emu`), which paces itself against the
+actual wall clock to keep a small ring buffer full for real-time playback -- not against how many
+`render_block()`/`processReplacing()` calls have happened. `tools/bench.c` has no `sleep`/pacing
+anywhere: it calls `processReplacing()` back-to-back as fast as the CPU allows, so a stage that's
+*supposed* to represent ~1s of real playback can complete in a few ms of actual wall-clock time. The
+background thread, pacing itself to the real clock, sees almost no elapsed time and does almost no
+work in that window -- but `threads%`'s formula (`(proc - self) / (nblocks * BUDGET_US)`) divides by
+the *real-time-equivalent* duration regardless of how little wall-clock time actually passed, so the
+true cost gets divided away to near-zero. Measured on the device: `tools/bench.sh` reported
+0.2-0.5% "threads%" for jv880 (a clean PASS), but sampling the real `jv880-emu` thread's CPU ticks
+via `/proc/<pid>/task/<tid>/stat` against `/proc/uptime` while it was actually loaded on a track and
+playing gave **20.8% of one core, sustained** -- roughly matching force-jv880's own "2.81x real-time"
+claim (`1/2.81 ≈ 36%`), and nothing like the bench's number. This is exactly the class of plugin
+docs/BENCH.md's own "Limits" section already warns about ("app-style plugins... do their real work in
+worker threads... watch `top` on the device instead") -- jv880 just wasn't recognized as fitting that
+category until checked directly. **For any port whose real work runs on a background thread paced to
+the wall clock (not to render_block() call count), don't trust `bench.sh`'s `threads%` at all** --
+sample the real thread's ticks on the device during actual playback instead:
+```
+u1=$(awk '{print $14}' /proc/<pid>/task/<tid>/stat); s1=$(awk '{print $15}' ...); t1=$(awk '{print $1}' /proc/uptime)
+# ...play for N seconds...
+u2=...; s2=...; t2=...
+# cpu% = (u2-u1 + s2-s1) / 100 (ticks/sec, usually HZ=100) / (t2-t1) * 100
+```
+
+## Qlink curation for tabs with >16 controls (2026-09-24, jv880 port)
+A tab with more controls than one 16-key Q-Link bank needs several `qlinks "<name>" = ...` lines
+(already-supported nested-page mechanism, docs/PORTING.md). A naive "first 16 in source order"
+split is a bad default for a busy tab: it silently drops every control past the 16th and often grabs
+all of one section while missing others entirely (e.g. a Tone tab's Pitch Env only, missing Filter/
+Amp Env and both LFOs). Better: group by FRAME first (accumulate whole frame-sections into a bank
+until the next one would push past 16, then start a new bank named after the section(s) it holds),
+so every control ends up in some bank and each bank reads as one coherent area (e.g. jv880's Tone
+tabs split cleanly into "Wave/Pitch + Pitch Env" / "Filter Env + Amp Env" / "LFO 1 + LFO 2", 44
+controls in 3 evenly-sized banks instead of losing everything past the first section).
+
+## No draggable/graph widgets in plugin skins (checked 2026-09-24)
+Pulled and inspected several stock `TUI.json` skins off the device, including AIR's own **TubeSynth**
+(which has real ADSR envelopes) and **Electric**/**Hype**. The full set of distinct `type` values across
+them is only knobs (`greyKnob`, `blueKnob`, `hypeKnobLarge`, …), `comboBox` variants, `fader`, `Button`,
+`switchButton`, `bypassButton`, `Label`, `Value`, `Image`, `Decorator` — no graph/curve/XY-pad component
+anywhere. So a Force Shadow-style draggable envelope graph (`env` widget) is not portable: Shadow can draw
+one because it owns the whole touchscreen framebuffer and its own touch driver, but MPC's plugin skin is a
+declarative JUCE component list bound directly to VST parameters, with no custom-drawn/gesture widget
+escape hatch. Even TubeSynth, which needed one, uses plain knobs per envelope stage instead. Port envelope
+UIs as knob rows (time/level per stage), not graphs.
+
 ## Native picker (menu overlay): not available to VST2 (tested 2026-09-24, `poc/menuprobe.c`)
 MPC's menu overlay (`comboBox` / `Show Overlay "menu overlay"`) opens **empty** for VST2 parameters. MPC never
 calls `effGetParameterProperties` (opcode 56; absent from the probe log), and a `<plugin>.vstxml` ValueType next to
@@ -124,6 +231,41 @@ MPC's JUCE host has only `juce::VSTPluginFormat` compiled in. The binary has no 
 either. The only `VST3` / `.vst3` strings are JUCE's wrapper-type names and a desktop-project file-extension list.
 So a VST3 bundle can't be loaded, whatever the settings say, and VST3 value lists can't fix the empty picker.
 Rerun the probe after firmware updates and on other models.
+
+## MIDI-generator VST wrapping a standalone-process engine (Force Acid, 2026-09-24)
+Force Acid (`force-acid`, a MockbaMod standalone process using RtMidi + a timer thread as its own
+"chain host" for `acid_core.c`, midi_fx_api_v1) ports to a VST2 the same way as a plugin_api_v2 DSP for
+the MIDI-out and clock problems, but needed a hand-written wrapper (`force-acid/vst/acid_vst.cpp`, not
+`wrapper/vst2_wrap.c`, which assumes `render_block` audio DSP): `tools/gen_vst.py` still generates
+params.h + the skin from a synthetic module.json (`chain_params` hand-transcribed from the standalone
+build's CC table, kept in sync by hand) since that pipeline only cares about the key/name/min/max/options/
+momentary shape, not the real host API.
+- **Clock, without a physical MIDI cable:** the standalone build derives BPM/transport from real 0xF8/
+  0xFA/0xFC MIDI clock (EMA of inter-pulse interval). A VST host hands this over cleanly instead:
+  `audioMasterGetTime` gives exact `tempo` and `ppqPos` already, so the wrapper synthesizes the same
+  24-PPQN clock byte stream from the ppqPos delta each block (`ceil(last/step)*step .. end`, step =
+  1/24 quarter note) and feeds it to the engine's own `process_midi()` unchanged -- no core changes
+  needed, exactly the "no new code in the core" case DESIGN.md describes for the Move->Force port.
+- **Host API with no instance argument** (`host_api_v1_t.get_bpm`/`get_clock_status`, acid_core.h): fine
+  to leave process-wide (one set of atomics, `move_midi_fx_init` called once), since MPC has one shared
+  transport for every plugin instance anyway -- matches host_shim.cpp's own simplification.
+- **MIDI out still needs the ALSA seq port workaround** (see "MIDI-generating plugins" above):
+  `effProcessEvents`/VST MIDI out reaches nowhere, so generated notes go out `snd_seq_event_output_direct`
+  from inside `processReplacing`, same as `poc/midiport.c`. Silence is written to the VST audio outputs
+  (`numOutputs=2`, no DSP) since the plugin only exists to reach MPC's plugin-parameter automation and the
+  MIDI routing UI.
+- **Chunk save without a "state" key in the core:** upstream/host_shim has no preset serialisation
+  (DESIGN.md's own "Known limitations"), so the wrapper builds its own `key=value;...` chunk from every
+  non-momentary param's `get_param()` and replays it with `set_param()` on `effSetChunk` -- no core changes.
+- Bench: **an app-style/MIDI-generator plugin's own work (clock synthesis + ALSA send) happens inside
+  `processReplacing`** here (not a background thread like Crate Digger's stream player), so unlike Crate
+  Digger, `tools/bench.sh` *does* exercise the real per-block cost. x86 local run (relative numbers only):
+  PASS, worst block 2.0%, p99 0.1%. **Device run (Force, 2026-09-24): PASS, worst p99 0.7%, worst block
+  1.4%, threads 0.0%** -- comfortable headroom for several instances alongside a live project.
+- Verified with x86 host test under ASan/UBSan (two instances, enum/float param round-trip, a 400-block
+  synthesized-clock run, chunk round-trip), an offline skin preview (`tools/studio.py preview`), and
+  `tools/bench.sh` on a real Force. Not yet installed/registered on a device (no `.so` on `/sdcard/vst`,
+  no `pluginList-arm` entry, no on-device plugin-list/insert/play/Q-Link/save-reload test yet).
 
 ## CPU layout (Force, 2026-09-24)
 RK3288, 4x Cortex-A17 @ 1.8 GHz (governor `performance`), `isolcpus=2-3`. MPC runs `AudioWorker0-3` (SCHED_FIFO),

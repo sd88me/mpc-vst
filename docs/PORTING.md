@@ -27,6 +27,9 @@ just call it. Don't vendor copies of the wrapper or tools. Then bench it (docs/B
 - [ ] Stable order (the VST index is what skins and projects bind to). Append only; never reorder a shipped plugin.
 - [ ] Options: an index; nudges step one option (the wrapper does this). Triggers: `access:"write"`, which springs back.
 - [ ] Display strings are the only dynamic text channel into the skin (see NOTES on refresh behaviour).
+      A param whose `get_param()` returns real text (a name, a status message), not a number, needs
+      `"display": "string"` in its chain_params entry -- otherwise the wrapper's default numeric
+      reformatting mangles it down to "0" (see NOTES).
 
 ## 3. Skin
 - [ ] Design in a layout `.conf` (Force Shadow widget syntax plus `qlinks`/`rows=`), or port an existing shadow page.

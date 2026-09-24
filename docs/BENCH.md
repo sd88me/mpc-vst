@@ -38,6 +38,14 @@ puts it into the release's INSTALL.md.
 
 Limits: the bench drives the audio path only. App-style plugins (e.g. Crate Digger) do their real work in worker
 threads and child processes that the bench doesn't trigger. Watch `top` on the device while using them instead.
+This also catches out instruments whose synthesis runs on a background thread paced to the real wall clock
+rather than to how many blocks the bench has called (e.g. jv880: a ring-buffer-filling emulator thread) --
+`bench.c` has no pacing/sleep, so it races through blocks far faster than real time, and `threads%`'s formula
+divides by the *assumed* real-time-equivalent duration regardless of how little wall-clock time actually
+passed, making that thread's true cost vanish. Confirmed on device: bench reported 0.2-0.5% for jv880 (PASS),
+but the real `jv880-emu` thread measured **20.8% of one core** sampled directly via `/proc` while actually
+playing (see mpc-vst's own docs/NOTES.md). Don't trust `threads%` for this class of plugin; sample the real
+thread's ticks on the device during actual playback instead.
 
 ## Reference results (Force, RK3288 Cortex-A17 @ 1.8 GHz, MPC running, 2026-09-24)
 
