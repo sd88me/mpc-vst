@@ -280,8 +280,80 @@ momentary shape, not the real host API.
   1.4%, threads 0.0%** -- comfortable headroom for several instances alongside a live project.
 - Verified with x86 host test under ASan/UBSan (two instances, enum/float param round-trip, a 400-block
   synthesized-clock run, chunk round-trip), an offline skin preview (`tools/studio.py preview`), and
-  `tools/bench.sh` on a real Force. Not yet installed/registered on a device (no `.so` on `/sdcard/vst`,
-  no `pluginList-arm` entry, no on-device plugin-list/insert/play/Q-Link/save-reload test yet).
+  `tools/bench.sh` on a real Force. Installed and registered on a Force 2026-09-24 (`.so` on
+  `/sdcard/vst`, skin on `/sdcard/Synths`, `pluginList-arm` entry added, `MPC.settings` backed up first).
+  User plugin-list/insert/play/Q-Link/save-reload test on the touchscreen still pending.
+
+## A skin needs its app's own theme copied in, not left at the tool's default (Force Acid, 2026-09-24)
+Force Acid's first skin pass built and previewed without error -- correct layout, correct controls,
+looked like a plausible plugin skin -- but didn't look anything like the real force-acid shadow page
+(which is yellow chassis / red buttons / dark knobs, from `addon/shadow_page.conf`'s `theme_*` lines).
+Cause: `vst/layout.conf` had no `style=`/`theme_*` lines at all, so `shadow_art` rendered with its own
+generic default palette (cream knobs, dark plate, orange accent) -- the same palette Crate Digger's and
+Maze's *un-themed* previews would also fall back to, except those two ports happened to copy their
+source app's theme into `layout.conf` already, so the gap wasn't visible before. Fix: copy the
+`style=`/`theme_*` block from the app's own `addon/shadow_page.conf` verbatim into the top of the
+port's `layout.conf`. Mechanism: `shadow_skin.py`'s `build()` sends the whole layout file to `shadow_art`
+as `theme|<layout.conf>`, which loads it with `render_conf_preview.c`'s own `load_conf()` -- the exact
+theme system force-shadow's on-device renderer uses, every `theme_*` key, not just the dozen or so
+`apply_theme()` uses Python-side for label text colour. This is now step 1 of docs/PORTING.md's Skin
+section and called out in the skill's "Custom layouts from Force Shadow pages" section -- do this before
+laying out a single control, and always compare the preview against the app's own screenshot/mockup
+(not just "does this look like a plausible skin") before calling a skin done.
+
+## Force DX7: engine-with-host-side-glue port, audio bridge left open (2026-09-24)
+Ported force-dx7 (a standalone `dx7_host` process wrapping Dexed/MSFA, controlled over a
+Unix control socket -- see `force-dx7/src/dx7_host.cpp`) to `force-dx7/vst/` in this repo.
+Not built through `tools/build_port.sh`/`wrapper/vst2_wrap.c` (no directly-linkable DSP
+module here, category 2 of docs/PORTING.md): a port-specific wrapper, `force-dx7/vst/
+dx7_vst.c`, plus its own `build.sh`, `gen_params.py`, `params.json` (152 params, hand-derived
+from `addon/shadow_page.conf`'s full control surface -- module.json's own chain_params only
+lists a curated ~20, the Move-style "knobs" subset, not the full per-operator surface a
+Force page/VST would want) and `layout.conf` (theme + GLOBAL/OP1-6 tabs copied from
+shadow_page.conf; the BANKS tab was dropped -- its `list` widgets scan a live bank/patch
+folder, which has no static-VST-parameter analogue).
+- **Params, MIDI, chunk save/restore: wired and offline-tested.** The wrapper spawns
+  dx7_host via `posix_spawn` (LD_PRELOAD stripped) if none is reachable at its control
+  socket, else attaches to the one already running (matches the device's real model: one
+  shared dx7_host, started from /moduler, not one per plugin instance). Every param get/set
+  is a `SET key val\n`/`GET key\n` round trip; VST MIDI-in is forwarded to dx7_host's ALSA
+  seq port (`DX7:In (Mockba)`) by client/port name lookup, same approach as `poc/midiport.c`
+  but as the sender connecting to an existing input port rather than exposing our own for
+  MPC to route into; chunk save/restore builds its own `key=value;...` blob (dx7_host has no
+  "state" key), matching force-acid's `acid_vst.cpp` pattern.
+- **Audio passthrough is NOT implemented -- processReplacing outputs silence.** dx7_host
+  renders into a POSIX shared-memory ring (`forceAudioInject.h`) that is explicitly
+  documented single-producer/single-consumer, with ForceAudioJack.so as the sole consumer
+  advancing `tail` on MPC's own real-time capture thread. This VST could shadow-read `head`
+  without ever touching `tail` (safe, never claims the consumer role), but that's real
+  unwritten work (own read cursor, resample from the ring's 44.1k/128-frame producer cadence
+  into whatever block size the host calls with) and is untestable offline without a running
+  dx7_host + shm segment. Smallest viable fix instead: teach dx7_host an alternate output
+  mode (e.g. `--vst-shm <name>`, or claim an otherwise-unused mix slot) that a VST wrapper
+  opens as sole owner -- a small, additive change to `force-dx7/src/dx7_host.cpp`, no risk to
+  the existing shadow-GUI path. Until then this port is a remote-control + MIDI-conduit
+  plugin for whichever dx7_host is running; actual sound still reaches speakers only via
+  ForceAudioJack, exactly as today's shadow-GUI addon.
+- **Offline x86 test** (`gcc:12` container, ASan+UBSan): built `dx7_vst.c` against a
+  hand-written fake control-socket server (`fake_dx7_host.c`, not force-dx7's real
+  dx7_host/MSFA -- exercises the wrapper's own socket-client code, not DSP correctness) --
+  PASSED: two instances, magic/flags, param set→display→getParameter round-trip (op1_level),
+  chunk capture + restore onto a second instance, `effProcessEvents` with no ALSA port
+  reachable (graceful no-op, no crash). **Structurally untestable offline** (both need a real
+  dx7_host + force-audio-jack running on a device, not just this repo's tools): MIDI actually
+  reaching Dexed's engine (needs `DX7:In (Mockba)` to exist), and anything about the audio
+  ring (see above -- there is no audio path yet to test).
+- **Skin preview**: `tools/studio.py preview` on the built skin composited cleanly (14 pages:
+  GLOBAL, GLOBAL 2, OP1-OP6 x2). Confirmed the cyan-on-slate LCD look from
+  `addon/shadow_page.conf`'s `theme_*` block came through (near-black `0f1214` background,
+  cyan-ish frame lines/accent, dark knob faces) -- not `shadow_art`'s generic default
+  palette -- by copying the theme block verbatim to the top of `layout.conf` per PORTING.md.
+- `tools/bench.sh` not run: this port has no real per-block DSP work in `processReplacing`
+  (it's silence; the real synthesis, when the audio bridge exists, runs in dx7_host's own
+  process/thread, off this VST's call stack entirely -- more like Crate Digger's "app-style"
+  case than a normal in-process DSP plugin, see BENCH.md's Limits section) and was not
+  installed/registered on a device this session (explicitly out of scope -- device
+  registration needs the user's own go-ahead).
 
 ## CPU layout (Force, 2026-09-24)
 RK3288, 4x Cortex-A17 @ 1.8 GHz (governor `performance`), `isolcpus=2-3`. MPC runs `AudioWorker0-3` (SCHED_FIFO),

@@ -1,0 +1,1134 @@
+[
+  {
+    "key": "algorithm",
+    "name": "ALGORITHM",
+    "min": 1.0,
+    "max": 32.0,
+    "default": 1.0
+  },
+  {
+    "key": "feedback",
+    "name": "FEEDBACK",
+    "min": 0.0,
+    "max": 7.0,
+    "default": 0.0
+  },
+  {
+    "key": "output_level",
+    "name": "OUTPUT",
+    "min": 0.0,
+    "max": 100.0,
+    "default": 50.0
+  },
+  {
+    "key": "octave_transpose",
+    "name": "OCTAVE",
+    "min": -3.0,
+    "max": 3.0,
+    "default": 0.0
+  },
+  {
+    "key": "transpose",
+    "name": "TRANSPOSE",
+    "min": 0.0,
+    "max": 48.0,
+    "default": 24.0
+  },
+  {
+    "key": "osc_sync",
+    "name": "OSC SYNC",
+    "min": 0.0,
+    "max": 1.0,
+    "default": 0.0
+  },
+  {
+    "key": "mix.gain",
+    "name": "VOICE VOL",
+    "min": 0.0,
+    "max": 150.0,
+    "default": 60.0
+  },
+  {
+    "key": "mix.dest_idx",
+    "name": "DEST",
+    "options": [
+      "I1",
+      "I2",
+      "O3",
+      "O4",
+      "I1+2",
+      "O3+4"
+    ],
+    "default": "I1"
+  },
+  {
+    "key": "lfo_speed",
+    "name": "SPEED",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "lfo_delay",
+    "name": "DELAY",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "lfo_pmd",
+    "name": "PMD",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "lfo_amd",
+    "name": "AMD",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "lfo_pms",
+    "name": "PMS",
+    "min": 0.0,
+    "max": 7.0,
+    "default": 3.5
+  },
+  {
+    "key": "lfo_wave",
+    "name": "WAVEFORM",
+    "options": [
+      "TRI",
+      "SAWD",
+      "SAWU",
+      "SQR",
+      "SIN",
+      "S/H"
+    ],
+    "default": "TRI"
+  },
+  {
+    "key": "lfo_sync",
+    "name": "SYNC",
+    "min": 0.0,
+    "max": 1.0,
+    "default": 0.0
+  },
+  {
+    "key": "pitch_eg_r1",
+    "name": "RATE 1",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "pitch_eg_l1",
+    "name": "LEVEL 1",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "pitch_eg_r2",
+    "name": "RATE 2",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "pitch_eg_l2",
+    "name": "LEVEL 2",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "pitch_eg_r3",
+    "name": "RATE 3",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "pitch_eg_l3",
+    "name": "LEVEL 3",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "pitch_eg_r4",
+    "name": "RATE 4",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "pitch_eg_l4",
+    "name": "LEVEL 4",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op1_level",
+    "name": "LEVEL",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op1_coarse",
+    "name": "COARSE",
+    "min": 0.0,
+    "max": 31.0,
+    "default": 15.5
+  },
+  {
+    "key": "op1_fine",
+    "name": "FINE",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op1_detune",
+    "name": "DETUNE",
+    "min": 0.0,
+    "max": 14.0,
+    "default": 7.0
+  },
+  {
+    "key": "op1_vel_sens",
+    "name": "VEL SENS",
+    "min": 0.0,
+    "max": 7.0,
+    "default": 3.5
+  },
+  {
+    "key": "op1_amp_mod",
+    "name": "AMP MOD",
+    "min": 0.0,
+    "max": 3.0,
+    "default": 1.5
+  },
+  {
+    "key": "op1_rate_scale",
+    "name": "RATE SC",
+    "min": 0.0,
+    "max": 7.0,
+    "default": 3.5
+  },
+  {
+    "key": "op1_osc_mode",
+    "name": "MODE",
+    "options": [
+      "RATIO",
+      "FIXED"
+    ],
+    "default": "RATIO"
+  },
+  {
+    "key": "op1_key_bp",
+    "name": "BREAKPT",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op1_key_ld",
+    "name": "L DEPTH",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op1_key_rd",
+    "name": "R DEPTH",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op1_key_lc",
+    "name": "L CURVE",
+    "options": [
+      "-LIN",
+      "-EXP",
+      "+EXP",
+      "+LIN"
+    ],
+    "default": "-LIN"
+  },
+  {
+    "key": "op1_key_rc",
+    "name": "R CURVE",
+    "options": [
+      "-LIN",
+      "-EXP",
+      "+EXP",
+      "+LIN"
+    ],
+    "default": "-LIN"
+  },
+  {
+    "key": "op1_eg_r1",
+    "name": "RATE 1",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op1_eg_l1",
+    "name": "LEVEL 1",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op1_eg_r2",
+    "name": "RATE 2",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op1_eg_l2",
+    "name": "LEVEL 2",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op1_eg_r3",
+    "name": "RATE 3",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op1_eg_l3",
+    "name": "LEVEL 3",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op1_eg_r4",
+    "name": "RATE 4",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op1_eg_l4",
+    "name": "LEVEL 4",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op2_level",
+    "name": "LEVEL",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op2_coarse",
+    "name": "COARSE",
+    "min": 0.0,
+    "max": 31.0,
+    "default": 15.5
+  },
+  {
+    "key": "op2_fine",
+    "name": "FINE",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op2_detune",
+    "name": "DETUNE",
+    "min": 0.0,
+    "max": 14.0,
+    "default": 7.0
+  },
+  {
+    "key": "op2_vel_sens",
+    "name": "VEL SENS",
+    "min": 0.0,
+    "max": 7.0,
+    "default": 3.5
+  },
+  {
+    "key": "op2_amp_mod",
+    "name": "AMP MOD",
+    "min": 0.0,
+    "max": 3.0,
+    "default": 1.5
+  },
+  {
+    "key": "op2_rate_scale",
+    "name": "RATE SC",
+    "min": 0.0,
+    "max": 7.0,
+    "default": 3.5
+  },
+  {
+    "key": "op2_osc_mode",
+    "name": "MODE",
+    "options": [
+      "RATIO",
+      "FIXED"
+    ],
+    "default": "RATIO"
+  },
+  {
+    "key": "op2_key_bp",
+    "name": "BREAKPT",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op2_key_ld",
+    "name": "L DEPTH",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op2_key_rd",
+    "name": "R DEPTH",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op2_key_lc",
+    "name": "L CURVE",
+    "options": [
+      "-LIN",
+      "-EXP",
+      "+EXP",
+      "+LIN"
+    ],
+    "default": "-LIN"
+  },
+  {
+    "key": "op2_key_rc",
+    "name": "R CURVE",
+    "options": [
+      "-LIN",
+      "-EXP",
+      "+EXP",
+      "+LIN"
+    ],
+    "default": "-LIN"
+  },
+  {
+    "key": "op2_eg_r1",
+    "name": "RATE 1",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op2_eg_l1",
+    "name": "LEVEL 1",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op2_eg_r2",
+    "name": "RATE 2",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op2_eg_l2",
+    "name": "LEVEL 2",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op2_eg_r3",
+    "name": "RATE 3",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op2_eg_l3",
+    "name": "LEVEL 3",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op2_eg_r4",
+    "name": "RATE 4",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op2_eg_l4",
+    "name": "LEVEL 4",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op3_level",
+    "name": "LEVEL",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op3_coarse",
+    "name": "COARSE",
+    "min": 0.0,
+    "max": 31.0,
+    "default": 15.5
+  },
+  {
+    "key": "op3_fine",
+    "name": "FINE",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op3_detune",
+    "name": "DETUNE",
+    "min": 0.0,
+    "max": 14.0,
+    "default": 7.0
+  },
+  {
+    "key": "op3_vel_sens",
+    "name": "VEL SENS",
+    "min": 0.0,
+    "max": 7.0,
+    "default": 3.5
+  },
+  {
+    "key": "op3_amp_mod",
+    "name": "AMP MOD",
+    "min": 0.0,
+    "max": 3.0,
+    "default": 1.5
+  },
+  {
+    "key": "op3_rate_scale",
+    "name": "RATE SC",
+    "min": 0.0,
+    "max": 7.0,
+    "default": 3.5
+  },
+  {
+    "key": "op3_osc_mode",
+    "name": "MODE",
+    "options": [
+      "RATIO",
+      "FIXED"
+    ],
+    "default": "RATIO"
+  },
+  {
+    "key": "op3_key_bp",
+    "name": "BREAKPT",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op3_key_ld",
+    "name": "L DEPTH",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op3_key_rd",
+    "name": "R DEPTH",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op3_key_lc",
+    "name": "L CURVE",
+    "options": [
+      "-LIN",
+      "-EXP",
+      "+EXP",
+      "+LIN"
+    ],
+    "default": "-LIN"
+  },
+  {
+    "key": "op3_key_rc",
+    "name": "R CURVE",
+    "options": [
+      "-LIN",
+      "-EXP",
+      "+EXP",
+      "+LIN"
+    ],
+    "default": "-LIN"
+  },
+  {
+    "key": "op3_eg_r1",
+    "name": "RATE 1",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op3_eg_l1",
+    "name": "LEVEL 1",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op3_eg_r2",
+    "name": "RATE 2",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op3_eg_l2",
+    "name": "LEVEL 2",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op3_eg_r3",
+    "name": "RATE 3",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op3_eg_l3",
+    "name": "LEVEL 3",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op3_eg_r4",
+    "name": "RATE 4",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op3_eg_l4",
+    "name": "LEVEL 4",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op4_level",
+    "name": "LEVEL",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op4_coarse",
+    "name": "COARSE",
+    "min": 0.0,
+    "max": 31.0,
+    "default": 15.5
+  },
+  {
+    "key": "op4_fine",
+    "name": "FINE",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op4_detune",
+    "name": "DETUNE",
+    "min": 0.0,
+    "max": 14.0,
+    "default": 7.0
+  },
+  {
+    "key": "op4_vel_sens",
+    "name": "VEL SENS",
+    "min": 0.0,
+    "max": 7.0,
+    "default": 3.5
+  },
+  {
+    "key": "op4_amp_mod",
+    "name": "AMP MOD",
+    "min": 0.0,
+    "max": 3.0,
+    "default": 1.5
+  },
+  {
+    "key": "op4_rate_scale",
+    "name": "RATE SC",
+    "min": 0.0,
+    "max": 7.0,
+    "default": 3.5
+  },
+  {
+    "key": "op4_osc_mode",
+    "name": "MODE",
+    "options": [
+      "RATIO",
+      "FIXED"
+    ],
+    "default": "RATIO"
+  },
+  {
+    "key": "op4_key_bp",
+    "name": "BREAKPT",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op4_key_ld",
+    "name": "L DEPTH",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op4_key_rd",
+    "name": "R DEPTH",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op4_key_lc",
+    "name": "L CURVE",
+    "options": [
+      "-LIN",
+      "-EXP",
+      "+EXP",
+      "+LIN"
+    ],
+    "default": "-LIN"
+  },
+  {
+    "key": "op4_key_rc",
+    "name": "R CURVE",
+    "options": [
+      "-LIN",
+      "-EXP",
+      "+EXP",
+      "+LIN"
+    ],
+    "default": "-LIN"
+  },
+  {
+    "key": "op4_eg_r1",
+    "name": "RATE 1",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op4_eg_l1",
+    "name": "LEVEL 1",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op4_eg_r2",
+    "name": "RATE 2",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op4_eg_l2",
+    "name": "LEVEL 2",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op4_eg_r3",
+    "name": "RATE 3",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op4_eg_l3",
+    "name": "LEVEL 3",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op4_eg_r4",
+    "name": "RATE 4",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op4_eg_l4",
+    "name": "LEVEL 4",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op5_level",
+    "name": "LEVEL",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op5_coarse",
+    "name": "COARSE",
+    "min": 0.0,
+    "max": 31.0,
+    "default": 15.5
+  },
+  {
+    "key": "op5_fine",
+    "name": "FINE",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op5_detune",
+    "name": "DETUNE",
+    "min": 0.0,
+    "max": 14.0,
+    "default": 7.0
+  },
+  {
+    "key": "op5_vel_sens",
+    "name": "VEL SENS",
+    "min": 0.0,
+    "max": 7.0,
+    "default": 3.5
+  },
+  {
+    "key": "op5_amp_mod",
+    "name": "AMP MOD",
+    "min": 0.0,
+    "max": 3.0,
+    "default": 1.5
+  },
+  {
+    "key": "op5_rate_scale",
+    "name": "RATE SC",
+    "min": 0.0,
+    "max": 7.0,
+    "default": 3.5
+  },
+  {
+    "key": "op5_osc_mode",
+    "name": "MODE",
+    "options": [
+      "RATIO",
+      "FIXED"
+    ],
+    "default": "RATIO"
+  },
+  {
+    "key": "op5_key_bp",
+    "name": "BREAKPT",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op5_key_ld",
+    "name": "L DEPTH",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op5_key_rd",
+    "name": "R DEPTH",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op5_key_lc",
+    "name": "L CURVE",
+    "options": [
+      "-LIN",
+      "-EXP",
+      "+EXP",
+      "+LIN"
+    ],
+    "default": "-LIN"
+  },
+  {
+    "key": "op5_key_rc",
+    "name": "R CURVE",
+    "options": [
+      "-LIN",
+      "-EXP",
+      "+EXP",
+      "+LIN"
+    ],
+    "default": "-LIN"
+  },
+  {
+    "key": "op5_eg_r1",
+    "name": "RATE 1",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op5_eg_l1",
+    "name": "LEVEL 1",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op5_eg_r2",
+    "name": "RATE 2",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op5_eg_l2",
+    "name": "LEVEL 2",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op5_eg_r3",
+    "name": "RATE 3",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op5_eg_l3",
+    "name": "LEVEL 3",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op5_eg_r4",
+    "name": "RATE 4",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op5_eg_l4",
+    "name": "LEVEL 4",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op6_level",
+    "name": "LEVEL",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op6_coarse",
+    "name": "COARSE",
+    "min": 0.0,
+    "max": 31.0,
+    "default": 15.5
+  },
+  {
+    "key": "op6_fine",
+    "name": "FINE",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op6_detune",
+    "name": "DETUNE",
+    "min": 0.0,
+    "max": 14.0,
+    "default": 7.0
+  },
+  {
+    "key": "op6_vel_sens",
+    "name": "VEL SENS",
+    "min": 0.0,
+    "max": 7.0,
+    "default": 3.5
+  },
+  {
+    "key": "op6_amp_mod",
+    "name": "AMP MOD",
+    "min": 0.0,
+    "max": 3.0,
+    "default": 1.5
+  },
+  {
+    "key": "op6_rate_scale",
+    "name": "RATE SC",
+    "min": 0.0,
+    "max": 7.0,
+    "default": 3.5
+  },
+  {
+    "key": "op6_osc_mode",
+    "name": "MODE",
+    "options": [
+      "RATIO",
+      "FIXED"
+    ],
+    "default": "RATIO"
+  },
+  {
+    "key": "op6_key_bp",
+    "name": "BREAKPT",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op6_key_ld",
+    "name": "L DEPTH",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op6_key_rd",
+    "name": "R DEPTH",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op6_key_lc",
+    "name": "L CURVE",
+    "options": [
+      "-LIN",
+      "-EXP",
+      "+EXP",
+      "+LIN"
+    ],
+    "default": "-LIN"
+  },
+  {
+    "key": "op6_key_rc",
+    "name": "R CURVE",
+    "options": [
+      "-LIN",
+      "-EXP",
+      "+EXP",
+      "+LIN"
+    ],
+    "default": "-LIN"
+  },
+  {
+    "key": "op6_eg_r1",
+    "name": "RATE 1",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op6_eg_l1",
+    "name": "LEVEL 1",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op6_eg_r2",
+    "name": "RATE 2",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op6_eg_l2",
+    "name": "LEVEL 2",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op6_eg_r3",
+    "name": "RATE 3",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op6_eg_l3",
+    "name": "LEVEL 3",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op6_eg_r4",
+    "name": "RATE 4",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "op6_eg_l4",
+    "name": "LEVEL 4",
+    "min": 0.0,
+    "max": 99.0,
+    "default": 49.5
+  },
+  {
+    "key": "preset",
+    "name": "Preset",
+    "min": 0.0,
+    "max": 31.0,
+    "default": 0.0
+  },
+  {
+    "key": "syx_bank_name",
+    "name": "Bank",
+    "string": true
+  },
+  {
+    "key": "patch_name",
+    "name": "Patch",
+    "string": true
+  }
+]
