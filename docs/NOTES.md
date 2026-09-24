@@ -268,6 +268,26 @@ Google Fonts' GitHub repo (`raw.githubusercontent.com/google/fonts/main/ofl/<nam
 is a reliable direct-download source when `fonts.google.com/download` itself returns an HTML page,
 not a zip, for the same request.
 
+## A readout bound elsewhere (get=) needs audioMasterUpdateDisplay to ever refresh (2026-09-24, jv880)
+Found live on a real device: patch_name/bank_name-style readouts (a stepper's get= binds its
+displayed text to a DIFFERENT param than the one it steps, via a separate "Text" handle -- see the
+"shows 0" entry above) painted correctly ONCE, then never updated again, regardless of whether the
+underlying param changed via the stepper's own arrow tap or a direct Q-Link turn on the stepped
+param. Root cause: such a readout is deliberately given a degenerate min==max range (its own
+reported normalized value never changes, since nothing should ever Q-Link-nudge it meaningfully),
+so MPC has no value-change signal telling it to re-poll THAT param's display text just because some
+OTHER param changed it indirectly -- there's nothing to notice.
+`audioMasterUpdateDisplay` (opcode 42) is the fix, already documented above as refreshing a Label
+"Name" -- calling it makes MPC re-poll everything currently displayed, sidestepping the fact that it
+has no way to know get='s cross-parameter dependency exists. **Not safe to call directly inside
+setParameter()** though: this repo's wrapper already has an established rule against re-entering the
+host from inside its own call to us (`w->release[]`'s existing comment, same reasoning -- momentary
+triggers already defer their own `audioMasterAutomate` call to `processReplacing()` for exactly this
+reason). Added a `need_update_display` flag alongside it, consumed the same way: coalesced to at
+most one `audioMasterUpdateDisplay` per audio block, regardless of how many params changed within
+it. Worth remembering for ANY future `get=`-bound (or otherwise cross-parameter-dependent) readout:
+it needs this call somewhere, or it will only ever show its initial value.
+
 ## A continuously-nudgeable control on a synchronous, expensive DSP action can "hang" the plugin (2026-09-24, jv880)
 Reported on device as "banks and patches hanging, says loading emulator". Root cause: jv880's
 `jump_to_expansion` does a synchronous 8MB `memcpy` (plus a first-access disk read+unscramble --
