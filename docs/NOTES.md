@@ -155,6 +155,22 @@ Pillow 10.1+; the `python:3.11-slim` container's `pip install pillow` pulls a re
 pixel-identical to Titillium Web, but proportional and good enough to sanity-check spacing/overlap
 offline before ever touching a device.
 
+## Real-device findings from the jv880 skin's first hardware test (2026-09-24)
+A screenshot of the actual device (not the offline `studio.py preview`, which can't catch these)
+turned up two more bugs, both now fixed:
+- **Stepper arrows showed the word "Button"** literally overlapping the arrow glyph. A `_button()`
+  with `onImage`/`offImage` = `""` (no asset) makes MPC render a generic placeholder caption instead
+  of nothing. Fixed by cropping the arrow glyph already baked into that tab's background (drawn by
+  `widget_stepper`/`dot_stepper`) as the tap-zone's own image, instead of an empty string.
+- **MPC's bottom function-key tab strip is genuinely unreadable with long qlink bank names.** Nested
+  `qlinks "<name>" = ...` banks (multiple sub-pages per tab, docs/PORTING.md) each set that sub-page's
+  name in MPC's own tab strip -- and that strip is not sized for 20+ character names, even
+  truncated: on device it read as one unbroken, mid-word-truncated run-on across the whole strip
+  ("OUTPUT + MACROS (OF CONTROL + BEND / POR TONE 1 WAVE / PITCH + ..."). Stock skins (single qlinks
+  bank per tab, e.g. Maze) never exercise this since they only ever show ONE short tab name. **Keep
+  every qlinks bank name short (one or two words, no concatenated frame titles)** -- jv880 uses
+  "Play"/"Sends", "Patch"/"FX", "Tone N"/"Env N"/"LFO N".
+
 ## String-valued display params showed "0" (2026-09-24, jv880: bank/patch name readouts)
 `vst2_wrap.c`'s `effGetParamDisplay` unconditionally reformatted every parameter's `get_param()`
 string through `atof()` + `snprintf("%.*f", ...)` -- fine for a real numeric display ("63.5"), but
