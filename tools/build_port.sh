@@ -42,15 +42,15 @@ else
   docker run --rm --platform linux/arm/v7 -u "$U" -v "$ROOT":/b -v "$MV":/mv:ro -w /b arm32v7/gcc:12 bash -euc "
     OBJS=''
     for f in $SOURCES; do
-      o=\"\${f//\//_}.o\"
+      o=\"$PORT/build/\${f//\//_}.o\"
       case \"\$f\" in
         *.cpp|*.cc|*.cxx) g++ -O2 -Wall -Wextra -Wno-unused-parameter -fPIC -fvisibility=hidden -std=gnu++11 $CFLAGS -I'$PORT/build' -c \"\$f\" -o \"\$o\" ;;
         *) gcc -O2 -Wall -Wextra -Wno-unused-parameter -fPIC -fvisibility=hidden -std=gnu11 $CFLAGS -I'$PORT/build' -c \"\$f\" -o \"\$o\" ;;
       esac
       OBJS=\"\$OBJS \$o\"
     done
-    gcc -O2 -Wall -Wextra -Wno-unused-parameter -fPIC -fvisibility=hidden -std=gnu11 -I'$PORT/build' -c /mv/wrapper/vst2_wrap.c -o vst2_wrap.o
-    g++ -O2 -shared -fPIC -fvisibility=hidden \$OBJS vst2_wrap.o $LIBS -o '$PORT/build/$SO'
+    gcc -O2 -Wall -Wextra -Wno-unused-parameter -fPIC -fvisibility=hidden -std=gnu11 -I'$PORT/build' -c /mv/wrapper/vst2_wrap.c -o '$PORT/build/vst2_wrap.o'
+    g++ -O2 -shared -fPIC -fvisibility=hidden \$OBJS '$PORT/build/vst2_wrap.o' $LIBS -o '$PORT/build/$SO'
     strip '$PORT/build/$SO'
     echo \"exported: \$(readelf --dyn-syms -W '$PORT/build/$SO' | grep -E ' GLOBAL .* [0-9]+ [A-Za-z]' | grep -v UND | awk '{print \$8}' | tr '\n' ' ')\"
     echo \"highest glibc: \$(readelf -V '$PORT/build/$SO' | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1) (device has 2.39)\"
