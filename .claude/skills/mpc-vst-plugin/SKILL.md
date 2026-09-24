@@ -73,6 +73,46 @@ backgrounds, knob filmstrips and button states. Shadow y−86 = skin y. Option c
 Check offline before deploying: composite TUI.json + PNGs into a preview image (paste each component at its bounds)
 and look at it. Skin-only changes need no restart.
 
+## Param opt-ins beyond a plain knob (added porting jv880; details + rationale in docs/NOTES.md)
+`module.json` chain_params entries feeding `gen_vst.py` can carry:
+- `"display": "string"` -- `param_t.string_display`: the wrapper passes `get_param`'s text straight to
+  `effGetParamDisplay` instead of `atof()`-reformatting it. Needed for any readout that's a name/label, not
+  a number (bank/patch names) -- without it the text collapses to "0".
+- `"display": "int"` -- `param_t.int_display`: forces a whole-number `%.0f` instead of one decimal place.
+- `"step_of": "<key>", "step_delta": N` on a `"kind": "trigger"` param -- `param_t.step_target`/`step_delta`:
+  a stepper arrow that nudges a DIFFERENT param by reading its live DSP value and writing back `+N`, clamped
+  to that param's declared min/max. Use when the DSP has no native `_prev`/`_next` verb for the value you
+  want to step (jv880's `preset`: no such verb existed, so `preset_next`/`preset_prev` silently did nothing
+  until switched to this mechanism). **Set the target's declared max generously** -- it's a static VST bound
+  hand-written ahead of time, and if it undershoots what the DSP can actually reach (e.g. with optional
+  expansion content loaded), values above it get silently clamped back down mid-browsing.
+- A stepper's displayed text can read from a *different* key than the one it steps (`get=` in layout.conf,
+  see below) -- e.g. step `preset` but display `patch_name`.
+- Any param whose `set_param` does real synchronous work (memcpy, disk read/unscramble, file load) must be
+  a discrete trigger/stepper, **never** a knob/slider -- a continuous control can fire many rapid calls from
+  one touch/drag gesture and stack up into a multi-second hang.
+- A readout with a deliberately degenerate `min==max` range (so MPC can't detect its own reported value
+  changing) needs the plugin to call `audioMasterUpdateDisplay` itself whenever the text should refresh, or
+  it never re-polls. Defer it: set a `need_update_display` flag in `setParameter` and fire the host call from
+  `processReplacing` (same pattern as the existing `w->release[]` deferred-automate array) -- calling the
+  host directly from inside its own call into the plugin is the established no-no in this wrapper.
+- `vst.json`'s `"title_font"` (a `.ttf`/`.otf` path, e.g. a real downloaded font under an OFL-style licence,
+  never a recreation of a manufacturer's proprietary font) overlays frame titles in that font via PIL after
+  the PNGs are drawn; off by default, every other port keeps its current look.
+- In `layout.conf`, a stepper's `prev=`/`next=` can call a different param's key than the one it displays,
+  and `get=` (paired with the widget's own separate "Text" handle) can display a different key than the one
+  it steps -- both needed together when the DSP's stepping verb and its human-readable name live on
+  different params.
+- **One Q-Link bank per tab, always** -- if a tab's control count would otherwise force a second Q-Link
+  bank, MPC still shows its own sub-page navigation UI (dots/arrows) even when both banks render identical
+  content, which reads as broken. Prefer curating each tab down to <=16 Q-Link-worthy controls (a priority
+  ranking -- knobs/levels first, enums/time-stage controls next, toggles/buttons last -- picks which ones
+  keep a physical knob; everything else stays touch-only) over ever letting a tab spill into a second bank.
+- `tools/bench.sh` understates CPU cost for a plugin whose real work runs on an independently wall-clock-paced
+  background thread: the bench harness has no pacing and races through blocks far faster than real time. For
+  such a plugin, sample real cost live instead: `/proc/<pid>/task/<tid>/stat` deltas against `/proc/uptime`
+  while actually playing it on-device.
+
 ## Skin studio (layout design)
 `tools/studio.py`: `auto` (params → first-pass layout.conf), `to-svg` / `from-svg` (Inkscape round trip; tabs are layers,
 controls are labelled groups, Q-Links in layer descriptions), `preview` (built skin → PNGs). Read docs/SKIN_STUDIO.md.
