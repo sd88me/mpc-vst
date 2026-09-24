@@ -1,13 +1,14 @@
 <VSTPluginProperties>
   <VSTParametersStructure>
+    <ValueType name="Colour">
+      <Entry name="RED" value="[0, 0.25["/>
+      <Entry name="GREEN" value="[0.25, 0.5["/>
+      <Entry name="BLUE" value="[0.5, 0.75["/>
+      <Entry name="YELLOW" value="[0.75, 1]"/>
+    </ValueType>
     <Param id="0" name="Props"/>
-    <Param id="1" name="VSTXML" type="Colour"/>
-    <Param id="2" name="Both" type="Colour"/>
+    <Param id="1" name="VSTXML" type="Colour" numberOfStates="4"/>
+    <Param id="2" name="Both" type="Colour" numberOfStates="4"/>
+    <Param id="3" name="States" numberOfStates="4"/>
   </VSTParametersStructure>
-  <ValueType name="Colour">
-    <Entry name="RED" value="[0, 0.25["/>
-    <Entry name="GREEN" value="[0.25, 0.5["/>
-    <Entry name="BLUE" value="[0.5, 0.75["/>
-    <Entry name="YELLOW" value="[0.75, 1]"/>
-  </ValueType>
 </VSTPluginProperties>
