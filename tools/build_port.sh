@@ -18,7 +18,17 @@ docker run --rm -u "$U" -v "$ROOT":/w -v "$MV":/mv:ro -v "$FORCE_SHADOW":/fs:ro 
   gcc -O2 -I/fs/tools -o "$PORT/build/shadow_art" /mv/tools/shadow_art.c -lm
 
 # 2. params.h, skin, plugin-list entry
-docker run --rm -u "$U" -v "$ROOT":/w -v "$MV":/mv:ro -w /w python:3.11-slim sh -c \
+# TITLE_FONT (vst.json's optional "title_font", a .ttf/.otf path relative to vst.json): a real
+# TrueType font for frame titles instead of shadow_art.c's baked bitmap font (shadow_skin.py's
+# SHADOW_TITLE_FONT env var). Mounted read-only into the container at the same relative path so
+# gen_vst.py's own repo-relative path resolution still works unchanged.
+FONT_MOUNT=()
+FONT_ENV=()
+if [ -n "$TITLE_FONT" ]; then
+  FONT_MOUNT=(-v "$ROOT/$PORT/$TITLE_FONT:/w/$PORT/$TITLE_FONT:ro")
+  FONT_ENV=(-e "SHADOW_TITLE_FONT=/w/$PORT/$TITLE_FONT")
+fi
+docker run --rm -u "$U" -v "$ROOT":/w -v "$MV":/mv:ro "${FONT_MOUNT[@]}" "${FONT_ENV[@]}" -w /w python:3.11-slim sh -c \
   "pip install -q --no-warn-script-location --target /tmp/p pillow >/dev/null 2>&1; PYTHONPATH=/tmp/p python3 /mv/tools/gen_vst.py '$PORT/vst.json'"
 
 # 3. the plugin (armhf, glibc 2.36 so it loads on the device's 2.39)

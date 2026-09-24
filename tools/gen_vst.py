@@ -131,7 +131,8 @@ def main():
         for k, v in (("ROOT", root), ("PORT", os.path.relpath(here, root)), ("SO", cfg["so"]),
                      ("SOURCES", " ".join(b.get("sources", []))), ("CFLAGS", " ".join(b.get("cflags", []))),
                      ("LIBS", " ".join(b.get("libs", ["-lm"]))),
-                     ("LAYOUT", "1" if cfg.get("layout") else "")):
+                     ("LAYOUT", "1" if cfg.get("layout") else ""),
+                     ("TITLE_FONT", cfg.get("title_font", ""))):
             print("%s=%s" % (k, shlex.quote(v)))
         return
     params = module_params(os.path.join(here, cfg["module"]))

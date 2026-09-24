@@ -8,6 +8,8 @@
  * Reads commands on stdin, one per line, fields separated by '|':
  *   clear|RRGGBB                      fill the whole 1280x800 canvas
  *   frame|x|y|w|h|TITLE               titled frame box
+ *   frameblank|x|y|w|h                 frame box, no title text (a real TrueType font draws the
+ *                                       title afterward via PIL -- see shadow_skin.py's TITLE_FONT)
  *   text|cx|y|scale|RRGGBB|TEXT       centred text (baked 9x9 font; uppercase only)
  *   knob|cx|cy|r|pct                  knob body: ring, face, pointer dot (no label/value)
  *   pill|cx|cy|on                     toggle pill (no label)
@@ -45,9 +47,30 @@ static void crop(const char *path, int x, int y, int w, int h) {
     fclose(f);
 }
 
+static void frame_box_blank(int x, int y, int w, int h) {
+    /* frame_box() minus its baked title text (mirrors its non-TD3 branch; TD3 isn't used by any
+     * port yet). A real TrueType font draws the title afterward via PIL (shadow_skin.py). */
+    fill_rect(x, y, w, 1, PLATE_LINE);
+    fill_rect(x, y, 1, h, PLATE_LINE);
+    fill_rect(x + w - 1, y, 1, h, PLATE_LINE);
+    fill_rect(x, y + h - 1, w, 1, PLATE_LINE);
+    fill_rect(x + 18, y + 36, w - 36, 1, PLATE_LINE);
+}
+
 static void knob_body(int cx, int cy, int r, int pct) {
-    /* widget_knob() minus its label/value text (those come from the skin) */
-    draw_ring(cx, cy, r + 3, 3, KNOB_RING);
+    /* widget_knob() minus its label/value text (those come from the skin). A dotted arc instead
+     * of a solid ring, closer to the JV-880 shadow mockups' "dark knob, green dotted arc, small
+     * pointer" look (docs/SHADOW-GUI-PROPOSAL.md) -- shadow_art.c's own addition (not shared with
+     * force-shadow's real on-device renderer, which keeps its plain ring). Dot count scales with
+     * radius so small/large knobs both read as a ring, not a sparse/crowded one. */
+    int ndots = r < 24 ? 16 : (r < 36 ? 22 : 28);
+    int dotr = r < 24 ? 1 : 2;
+    for (int i = 0; i < ndots; i++) {
+        double a = 2 * M_PI * i / ndots - M_PI / 2;
+        int dx = cx + (int)lround((r + 4) * cos(a));
+        int dy = cy + (int)lround((r + 4) * sin(a));
+        fill_circle(dx, dy, dotr, KNOB_RING);
+    }
     fill_circle(cx, cy, r, KNOB_FACE);
     int dx, dy;
     knob_dot(cx, cy, r, pct, &dx, &dy);
@@ -147,6 +170,7 @@ int main(void) {
         const char *op = a[0];
         if (!strcmp(op, "clear") && n == 2) clear(HEX(a[1]));
         else if (!strcmp(op, "frame") && n == 6) frame_box(atoi(a[1]), atoi(a[2]), atoi(a[3]), atoi(a[4]), a[5]);
+        else if (!strcmp(op, "frameblank") && n == 5) frame_box_blank(atoi(a[1]), atoi(a[2]), atoi(a[3]), atoi(a[4]));
         else if (!strcmp(op, "text") && n == 6) draw_text_c(atoi(a[1]), atoi(a[2]), a[5], (float)atof(a[3]), HEX(a[4]));
         else if (!strcmp(op, "knob") && n == 5) knob_body(atoi(a[1]), atoi(a[2]), atoi(a[3]), atoi(a[4]));
         else if (!strcmp(op, "pill") && n == 4) pill(atoi(a[1]), atoi(a[2]), atoi(a[3]));
