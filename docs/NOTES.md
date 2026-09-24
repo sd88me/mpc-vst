@@ -268,6 +268,33 @@ Google Fonts' GitHub repo (`raw.githubusercontent.com/google/fonts/main/ofl/<nam
 is a reliable direct-download source when `fonts.google.com/download` itself returns an HTML page,
 not a zip, for the same request.
 
+## A continuously-nudgeable control on a synchronous, expensive DSP action can "hang" the plugin (2026-09-24, jv880)
+Reported on device as "banks and patches hanging, says loading emulator". Root cause: jv880's
+`jump_to_expansion` does a synchronous 8MB `memcpy` (plus a first-access disk read+unscramble --
+measured ~900ms against real ROMs) with no debounce, and it was bound to a plain continuously-
+nudgeable `knob`. One touch/turn gesture can fire several `setParameter` calls in quick succession
+(each a real, distinct value along the drag), so a single knob nudge could queue up multiple ~1s
+synchronous DSP calls back to back -- easily several real seconds of apparent hang. Notably, the
+same DSP's own `preset` parameter handler already defers/debounces a cross-expansion patch change
+by design (~9ms) for exactly this reason; `jump_to_expansion` just didn't have the same protection.
+Fix was two-sided: added real `next_expansion`/`prev_expansion` DSP verbs (one bounded transition
+per call, mirroring `next_bank`/`prev_bank`) and switched the control to a `stepper` -- an arrow tap
+is structurally one discrete UI event, so it can't flood the DSP the way a knob drag can. **General
+rule for a port: any VST parameter whose DSP-side `set_param` does real, slow, synchronous work
+should be a discrete trigger/stepper, never a continuously-nudgeable knob or slider** -- a knob's
+whole *value range* being reachable by one drag gesture means the DSP has to be able to absorb many
+rapid calls, which is a much stronger requirement than "one value change is affordable".
+
+## Split-screen Q-Link banks: tried, reverted for small tabs (2026-09-24, jv880)
+The "every bank shows the same screen" architecture (see the section above) was built out into
+real separate-screen pages, then reverted after user feedback on the actual device: a small tab
+(Play/Sends, 17 controls -- one over the 16-key Q-Link limit) read as needlessly fragmented across
+two screens when it fit comfortably on one combined page (this is, after all, exactly how the
+original shadow page worked -- several Q-Link banks, one screen). The per-bank-page mechanism
+(frame-based segments, `persistent=1`) was reverted entirely rather than left as a half-used code
+path; a real per-tab opt-in for genuinely busy tabs (jv880's own Tone tabs, 44 controls, arguably
+still want it) is a plausible follow-up but not something to default to.
+
 ## Dotted-arc knobs (2026-09-24, jv880)
 shadow_art.c's `knob_body()` drew a solid ring; changed to a dotted arc (dot count/size scale with
 radius) to match the JV-880 shadow mockups' "dark knob, green dotted arc, small pointer" look. Only
