@@ -24,6 +24,34 @@ requirements, CPU result, checksums).
    `gh release create maze-voice-vst-v1.2.0 dist/Maze-Voice-1.2.0-mpc-armv7.zip --notes-file ...`
    Paste the zip's INSTALL.md "Requirements" and "Install" sections into the notes.
 
+## Releasing from CI
+`.github/workflows/vst-release.yml` is a reusable workflow that does steps 1, 2, 3 (as images) and 6 in GitHub Actions
+and attaches the zip to a **draft** release in the port's repo. Steps 4 and 5 stay on a device, and they are what
+you do to the draft's zip before publishing it, so the zip you tested is the zip people get.
+
+A port calls it from its own repo with a `workflow_dispatch` workflow that takes the version. Pin this repo to one
+commit in both places:
+```yaml
+jobs:
+  vst:
+    uses: sd88me/mpc-vst-plugins/.github/workflows/vst-release.yml@<sha>
+    permissions: { contents: write }
+    with:
+      tag: my-port-vst-v${{ inputs.version }}
+      version: ${{ inputs.version }}
+      tools_ref: <sha>                 # the same commit
+      vst_dir: vst                     # the build writes vst/build/<so>, skin/, pluginlist-entry.xml
+      build: vst/build.sh              # run from the port repo root; MPC_VST and FORCE_SHADOW are set
+      host_test: '"$MPC_VST/tools/test_port.sh" vst/vst.json'   # optional
+      about: One line about the plugin.
+      dry_run: ${{ inputs.dry_run }}   # optional: zip and previews as run artifacts only
+```
+Optional inputs: `extra` (release.py `--extra` specs), `zig` (a zig version to install) and `force_shadow_ref`
+(default `main`). The run's artifacts hold the zip and one PNG per skin page, and its summary lists what is left
+to do. CPU (step 4) comes from `<vst_dir>/bench.txt` when the port commits the `-j` output of `tools/bench.sh`;
+without it INSTALL.md has no CPU section. Re-running with the same version replaces the draft's zip. It refuses a
+version that is already published. Publishing the draft creates the tag.
+
 ## Versioning
 - `X.Y.Z` in the zip name and INSTALL.md. Bump Z for fixes, Y for new parameters or pages, X when parameter
   indices change. Changing the indices breaks saved projects, because MPC stores values by index.
