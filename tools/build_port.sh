@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build a Schwung-module port as an MPC OS VST2 instrument from its vst.json (see tools/gen_vst.py).
+# Build a port as an MPC OS VST2 instrument from its vst.json (see tools/gen_vst.py).
 #   tools/build_port.sh path/to/vst.json
 # Output in <vst.json folder>/build/: <so>, skin/<vendor> - VST - <name>/, pluginlist-entry.xml, params.h.
 # Needs Docker (with QEMU for arm32v7) and a force-shadow checkout for the skin artwork
@@ -8,6 +8,9 @@ set -euo pipefail
 MV="$(cd "$(dirname "$0")/.." && pwd)"
 CFG="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
 eval "$(python3 "$MV/tools/gen_vst.py" "$CFG" --shell)"
+# an engine from another ecosystem: its adapter (adapters/<name>/) provides mpc_engine()
+ADAPTER_SRC=""
+[ -n "$ADAPTER" ] && ADAPTER_SRC="/mv/adapters/$ADAPTER/${ADAPTER}_engine.c"
 FORCE_SHADOW="${FORCE_SHADOW:-$MV/../force-shadow}"
 [ -f "$FORCE_SHADOW/tools/render_conf_preview.c" ] || { echo "need a force-shadow checkout (FORCE_SHADOW)" >&2; exit 1; }
 U="$(id -u):$(id -g)"
@@ -43,7 +46,7 @@ esac
 if [ "$CXXPORT" = 0 ]; then
   docker run --rm --platform linux/arm/v7 -u "$U" -v "$ROOT":/b -v "$MV":/mv:ro -w /b arm32v7/gcc:12 bash -euc "
     gcc -O2 -Wall -Wextra -Wno-unused-parameter -fPIC -shared -fvisibility=hidden -std=gnu11 $CFLAGS -I'$PORT/build' \
-        $SOURCES /mv/wrapper/vst2_wrap.c $LIBS -o '$PORT/build/$SO'
+        $SOURCES $ADAPTER_SRC /mv/wrapper/vst2_wrap.c $LIBS -Wl,--no-undefined -o '$PORT/build/$SO'
     strip '$PORT/build/$SO'
     echo \"exported: \$(readelf --dyn-syms -W '$PORT/build/$SO' | grep -E ' GLOBAL .* [0-9]+ [A-Za-z]' | grep -v UND | awk '{print \$8}' | tr '\n' ' ')\"
     echo \"highest glibc: \$(readelf -V '$PORT/build/$SO' | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1) (device has 2.39)\"
@@ -60,7 +63,11 @@ else
       OBJS=\"\$OBJS \$o\"
     done
     gcc -O2 -Wall -Wextra -Wno-unused-parameter -fPIC -fvisibility=hidden -std=gnu11 -I'$PORT/build' -c /mv/wrapper/vst2_wrap.c -o '$PORT/build/vst2_wrap.o'
-    g++ -O2 -shared -fPIC -fvisibility=hidden \$OBJS '$PORT/build/vst2_wrap.o' $LIBS -o '$PORT/build/$SO'
+    if [ -n '$ADAPTER_SRC' ]; then
+      gcc -O2 -Wall -Wextra -fPIC -fvisibility=hidden -std=gnu11 -c '$ADAPTER_SRC' -o '$PORT/build/adapter.o'
+      OBJS=\"\$OBJS $PORT/build/adapter.o\"
+    fi
+    g++ -O2 -shared -fPIC -fvisibility=hidden \$OBJS '$PORT/build/vst2_wrap.o' $LIBS -Wl,--no-undefined -o '$PORT/build/$SO'
     strip '$PORT/build/$SO'
     echo \"exported: \$(readelf --dyn-syms -W '$PORT/build/$SO' | grep -E ' GLOBAL .* [0-9]+ [A-Za-z]' | grep -v UND | awk '{print \$8}' | tr '\n' ' ')\"
     echo \"highest glibc: \$(readelf -V '$PORT/build/$SO' | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1) (device has 2.39)\"

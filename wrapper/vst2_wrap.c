@@ -1,11 +1,11 @@
 /* =============================================================================
- * vst2_wrap.c — expose a Schwung plugin_api_v2 DSP as a Linux VST2 plugin so
+ * vst2_wrap.c — expose an engine (wrapper/engine.h) as a Linux VST2 plugin so
  * the built-in plugin host (JUCE) of MPC OS standalone devices can load it as a native track
- * instrument. Generic: the DSP is linked in, and the generated params.h
- * (gen_vst.py, from module.json) supplies the parameter table and identity.
+ * instrument. Generic: the engine is linked in, and the generated params.h
+ * (gen_vst.py, from the port's parameters) supplies the parameter table and identity.
  *
- * Host contract (MPC OS standalone): 44100 Hz, 128-frame blocks — the same as the Move,
- * so the DSP runs unmodified. Audio is rendered in 128-frame chunks through a
+ * Host contract (MPC OS standalone): 44100 Hz, 128-frame blocks, the engine's own
+ * block size. Audio is rendered in 128-frame chunks through a
  * small FIFO, so any host block size works; with 128-frame host blocks each
  * process() call renders exactly one DSP block and MIDI lands at its start.
  * ========================================================================== */
@@ -24,21 +24,9 @@
                           * (ROMs, etc.) from "<module_dir>/..." (see jv880's create_instance) */
 #endif
 
-/* ---- Schwung plugin_api_v2 (see src/include/plugin_api_v1.h) ------------ */
-typedef struct {
-    uint32_t api_version;
-    void *(*create_instance)(const char *module_dir, const char *json_defaults);
-    void (*destroy_instance)(void *instance);
-    void (*on_midi)(void *instance, const uint8_t *msg, int len, int source);
-    void (*set_param)(void *instance, const char *key, const char *val);
-    int (*get_param)(void *instance, const char *key, char *buf, int buf_len);
-    int (*get_error)(void *instance, char *buf, int buf_len);
-    void (*render_block)(void *instance, int16_t *out_lr, int frames);
-} plugin_api_v2_t;
-extern plugin_api_v2_t *move_plugin_init_v2(const void *host);
+#include "engine.h"
 
 #define DSP_BLOCK 128
-#define MIDI_SOURCE_EXTERNAL 2
 
 /* ---- VST2 ABI (hand-written; no Steinberg SDK) -------------------------- */
 typedef struct AEffect AEffect;
@@ -95,7 +83,7 @@ typedef struct {
     char chunk[8192];
 } wrap_t;
 
-static plugin_api_v2_t *g_api;
+static const mpc_engine_t *g_api;
 
 static float clamp01(float v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 
@@ -218,7 +206,7 @@ static void processReplacing(AEffect *e, float **in, float **out, int32_t n) {
     }
     for (int32_t i = 0; i < n; i++) {
         if (w->pos >= DSP_BLOCK) {
-            g_api->render_block(w->dsp, w->block, DSP_BLOCK);
+            g_api->render(w->dsp, w->block, DSP_BLOCK);
             w->pos = 0;
         }
         out[0][i] = w->block[w->pos * 2] * (1.0f / 32768.0f);
@@ -238,7 +226,7 @@ static intptr_t dispatcher(AEffect *e, int32_t op, int32_t idx, intptr_t v, void
     switch (op) {
     case effOpen: return 1;
     case effClose:
-        g_api->destroy_instance(w->dsp);
+        g_api->destroy(w->dsp);
         free(w);
         return 1;
     case effGetPlugCategory: return 2; /* kPlugCategSynth */
@@ -273,7 +261,7 @@ static intptr_t dispatcher(AEffect *e, int32_t op, int32_t idx, intptr_t v, void
         for (int i = 0; i < ev->numEvents; i++)
             if (ev->events[i]->type == 1) {
                 VstMidiEvent *m = (VstMidiEvent *)ev->events[i];
-                g_api->on_midi(w->dsp, m->midiData, 3, MIDI_SOURCE_EXTERNAL);
+                g_api->midi(w->dsp, m->midiData, 3);
             }
         return 1;
     }
@@ -298,11 +286,11 @@ static intptr_t dispatcher(AEffect *e, int32_t op, int32_t idx, intptr_t v, void
 }
 
 __attribute__((visibility("default"))) AEffect *VSTPluginMain(audioMasterCallback master) {
-    if (!g_api) g_api = move_plugin_init_v2(NULL);
+    if (!g_api) g_api = mpc_engine();
     if (!g_api) return NULL;
     wrap_t *w = calloc(1, sizeof *w);
     if (!w) return NULL;
-    w->dsp = g_api->create_instance(MODULE_DIR, NULL);
+    w->dsp = g_api->create(MODULE_DIR);
     if (!w->dsp) { free(w); return NULL; }
     w->master = master;
     w->pos = DSP_BLOCK;

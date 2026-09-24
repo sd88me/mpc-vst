@@ -32,7 +32,7 @@ Coordinates are Force Shadow landscape pixels (1280x800); the plugin area is
 1280x628, taken from y=Y_OFF. Each `qlinks` line makes one MPC sub-page of
 that tab (same design, its own Q-Link set, max 16: 1-8 bank 1, 9-16 bank 2).
 Without one, a tab's first 16 controls in file order get the Q-Links.
-Option counts must match the parameter's own (module.json) options.
+Option counts must match the parameter's own options.
 """
 import os
 import re

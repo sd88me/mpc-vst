@@ -6,8 +6,8 @@
     studio.py from-svg layout.svg -o layout.conf               edited SVG -> layout
     studio.py preview  SKIN_DIR -o out_%d.png                  built skin -> one PNG per page
 
-PARAMS is a Schwung module.json (chain_params, plus ui_hierarchy sections when present) or a
-port's params.json ({"params": [...]}). The layout is the shadow_page.conf-style file that
+PARAMS is a port's parameter file (tools/params.py; its "sections" become frames), or an
+adapter's source (adapters/). The layout is the shadow_page.conf-style file that
 shadow_skin.py builds skins from (see its docstring), so every route ends in the same pipeline:
 
     auto ──► layout.conf ──► to-svg ──► (edit in Inkscape) ──► from-svg ──► layout.conf ──► skin
@@ -35,6 +35,7 @@ import xml.etree.ElementTree as ET
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import shadow_skin  # noqa: E402
+import params  # noqa: E402
 
 W, H, Y_OFF = shadow_skin.W, shadow_skin.H, shadow_skin.Y_OFF
 SVG_NS = "http://www.w3.org/2000/svg"
@@ -51,40 +52,23 @@ GEOM_KEYS = ("x", "y", "w", "h", "cx", "cy", "r", "sw")
 # ---------------------------------------------------------------- parameters
 
 def load_params(path):
-    """-> (params list, sections [(label, [keys])])"""
-    d = json.load(open(path))
-    if "params" in d:
-        ps = d["params"]
-        return ps, [(d.get("name", "Main"), [p["key"] for p in ps])]
-    caps = d.get("capabilities", d)
-    ps = caps.get("chain_params") or d.get("chain_params") or []
-    keys = {p["key"] for p in ps}
-    sections, seen = [], set()
-    levels = (caps.get("ui_hierarchy") or {}).get("levels") or {}
-    order = ["root"] + [k for k in levels if k != "root"]
-    for lv in order:
-        if lv not in levels:
-            continue
-        ks = [k for k in levels[lv].get("params", []) if isinstance(k, str) and k in keys and k not in seen]
-        seen.update(ks)
-        if ks:
-            sections.append((levels[lv].get("label", lv), ks))
-    rest = [p["key"] for p in ps if p["key"] not in seen]
-    if not sections:   # no ui_hierarchy: group by key prefix
-        groups = {}
-        for k in rest:
-            groups.setdefault(k.split("_")[0], []).append(k)
-        sections = [(g.upper(), ks) for g, ks in groups.items()]
-    elif rest:
-        sections.append(("More", rest))
-    return ps, sections
+    """-> (params list, sections [(label, [keys])]); without sections, group by key prefix"""
+    ps, sections = params.load(path)
+    if sections:
+        seen = {k for _, ks in sections for k in ks}
+        rest = [p["key"] for p in ps if p["key"] not in seen]
+        return ps, sections + ([("More", rest)] if rest else [])
+    groups = {}
+    for p in ps:
+        groups.setdefault(p["key"].split("_")[0], []).append(p["key"])
+    return ps, [(g.upper(), ks) for g, ks in groups.items()]
 
 
 def kind_for(p):
     t = p.get("type", "float")
     if t in ("readout", "stepper"):
         return t
-    if t == "trigger" or p.get("access") == "write":
+    if t == "trigger" or p.get("momentary"):
         return "button"
     if t == "slot":
         return "slot"
@@ -507,7 +491,7 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
     a = sub.add_parser("auto"); a.add_argument("params"); a.add_argument("-o", required=True)
     s = sub.add_parser("to-svg"); s.add_argument("conf"); s.add_argument("-o", required=True)
-    s.add_argument("--params", help="module.json/params.json, to fill in omitted option lists")
+    s.add_argument("--params", help="the port's parameter file, to fill in omitted option lists")
     f = sub.add_parser("from-svg"); f.add_argument("svg"); f.add_argument("-o", required=True)
     p = sub.add_parser("preview"); p.add_argument("skin"); p.add_argument("-o", required=True)
     args = ap.parse_args()
