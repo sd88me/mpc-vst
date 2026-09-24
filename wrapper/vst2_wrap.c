@@ -78,7 +78,7 @@ enum {
     effGetEffectName = 45, effGetVendorString = 47, effGetProductString = 48,
     effGetVendorVersion = 49, effCanDo = 51, effGetVstVersion = 58,
 };
-enum { audioMasterAutomate = 0, audioMasterGetTime = 7, kVstTempoValid = 1 << 10 };
+enum { audioMasterAutomate = 0, audioMasterGetTime = 7, audioMasterUpdateDisplay = 42, kVstTempoValid = 1 << 10 };
 enum { effFlagsCanReplacing = 1 << 4, effFlagsProgramChunks = 1 << 5, effFlagsIsSynth = 1 << 8 };
 
 /* ---- per-instance state ------------------------------------------------- */
@@ -90,6 +90,7 @@ typedef struct {
     int pos;                 /* read position in block; DSP_BLOCK = empty */
     double bpm;
     volatile char release[NPARAMS];  /* momentary params to report back to 0 */
+    volatile char need_update_display;  /* deferred audioMasterUpdateDisplay -- see setParameter() */
     char chunk[8192];
 } wrap_t;
 
@@ -145,6 +146,15 @@ static void setParameter(AEffect *e, int32_t i, float n) {
             }
             w->release[i] = 1;
         }
+        /* A string-display readout (e.g. patch_name/bank_name) bound elsewhere via get= has a
+         * degenerate min==max range (its OWN reported normalized value never changes), so MPC has
+         * no value-change signal telling it to re-poll THAT param's displayed text just because
+         * THIS one changed it indirectly. audioMasterUpdateDisplay is the documented escape hatch
+         * (docs/NOTES.md: MPC re-polls a Label "Name" on it; readouts stayed stuck on their
+         * initial paint here without it -- confirmed on a real device, both via a stepper arrow
+         * tap and a direct Q-Link turn on the underlying param). Deferred to processReplacing(),
+         * same as w->release[] -- the host must not be re-entered from inside its own call to us. */
+        w->need_update_display = 1;
         return;
     }
     if (p->nopts > 1) {
@@ -163,6 +173,7 @@ static void setParameter(AEffect *e, int32_t i, float n) {
     norm_to_str(p, n, buf, sizeof buf);
     g_api->set_param(w->dsp, PARAMS[i].key, buf);
     if (PARAMS[i].momentary && n > 0.5f) w->release[i] = 1;
+    w->need_update_display = 1;   /* deferred to processReplacing(), see the step_target branch above */
 }
 
 static float getParameter(AEffect *e, int32_t i) { return get_norm(e->object, i); }
@@ -187,6 +198,10 @@ static void processReplacing(AEffect *e, float **in, float **out, int32_t n) {
      * setParameter, so the host is not re-entered from its own call. */
     for (int i = 0; i < NPARAMS; i++)
         if (w->release[i]) { w->release[i] = 0; w->master(&w->fx, audioMasterAutomate, i, 0, 0, 0.0f); }
+    if (w->need_update_display) {
+        w->need_update_display = 0;
+        w->master(&w->fx, audioMasterUpdateDisplay, 0, 0, 0, 0.0f);
+    }
     for (int32_t i = 0; i < n; i++) {
         if (w->pos >= DSP_BLOCK) {
             g_api->render_block(w->dsp, w->block, DSP_BLOCK);
