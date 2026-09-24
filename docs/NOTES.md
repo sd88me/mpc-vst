@@ -320,15 +320,28 @@ should be a discrete trigger/stepper, never a continuously-nudgeable knob or sli
 whole *value range* being reachable by one drag gesture means the DSP has to be able to absorb many
 rapid calls, which is a much stronger requirement than "one value change is affordable".
 
-## Split-screen Q-Link banks: tried, reverted for small tabs (2026-09-24, jv880)
+## Split-screen Q-Link banks: tried, reverted -- the real fix was one bank per tab (2026-09-24, jv880)
 The "every bank shows the same screen" architecture (see the section above) was built out into
 real separate-screen pages, then reverted after user feedback on the actual device: a small tab
 (Play/Sends, 17 controls -- one over the 16-key Q-Link limit) read as needlessly fragmented across
 two screens when it fit comfortably on one combined page (this is, after all, exactly how the
 original shadow page worked -- several Q-Link banks, one screen). The per-bank-page mechanism
 (frame-based segments, `persistent=1`) was reverted entirely rather than left as a half-used code
-path; a real per-tab opt-in for genuinely busy tabs (jv880's own Tone tabs, 44 controls, arguably
-still want it) is a plausible follow-up but not something to default to.
+path.
+
+That combined-screen revert still left MPC's own sub-page NAVIGATION in place (the dots/arrows
+letting you swipe between Play and Sends), even once their content was identical -- confirmed with
+the user this was still the actual complaint, not just a display bug, before changing anything
+further. The real fix isn't in mpc-vst-plugins' shared tooling at all: a tab only gets multiple
+Q-Link pages because its OWN `layout.conf` declares multiple `qlinks "..." = ...` lines --
+`shadow_skin.py` just does whatever the layout asks for. So a port that wants ZERO sub-page
+swiping, even for a genuinely busy tab (jv880's Tone tabs, 44 controls), emits exactly ONE
+`qlinks` line per tab, capped at 16 keys by priority (a main knob or an envelope LEVEL first, an
+envelope TIME or enum selector next, a toggle/trigger last) -- the rest stay on screen and
+touchable, just without a dedicated Q-Link knob. Confirmed directly with the user which tabs
+should get this treatment (all of them, accepting that Tone tabs lose knob access to roughly half
+their controls) rather than guessing a third time on a design question this session had already
+gotten wrong twice.
 
 ## Dotted-arc knobs (2026-09-24, jv880)
 shadow_art.c's `knob_body()` drew a solid ring; changed to a dotted arc (dot count/size scale with
@@ -351,6 +364,22 @@ UIs as knob rows (time/level per stage), not graphs.
 MPC's menu overlay (`comboBox` / `Show Overlay "menu overlay"`) opens **empty** for VST2 parameters. MPC never
 calls `effGetParameterProperties` (opcode 56; absent from the probe log), and a `<plugin>.vstxml` ValueType next to
 the .so made no difference. Use image-button selectors (`enum_h`/`enum_v`) or steppers instead.
+
+**Why Hype/TubeSynth's setup tabs look like they use it (checked on-device, 2026-09-24):** their
+`TUI.json` (`/usr/share/Akai/Content/Synths/AIR Music Technology - MPC - {Hype,TubeSynth}/Plugin Skins/`)
+does bind real `comboBox`/`blueComboBox` components straight to a plugin parameter (e.g. Hype's "Mode",
+"Legato Mode", "MW Dest", "Ctrl LFO Shape"; TubeSynth's "Polyphony" is a `blueComboBox`), with no
+option-text list embedded in the skin JSON — so the value list has to come from somewhere live, same
+shape as our probe expected. But **Hype and TubeSynth are not external VST2 plugins at all**: there is
+no `Hype`/`TubeSynth` `.so` anywhere under `/usr`, they never appear as `PLUGIN` entries in
+`MPC.settings`, and `strings /usr/bin/MPC` shows them as internal DSP part types (`H3Part Type='Hype'`,
+`Type='AnaloguePoly' Name='TubeSynth'`) baked directly into the MPC binary alongside AIR's other stock
+instruments (Bassline, TubeDrive). They just reuse the VST-plugin-skin *format* (`TUI.json`,
+`localComponentDefinitions`, the same component type names) for their UI. Because MPC owns the DSP
+object directly with no VST2 ABI in between, it can supply the picker's live value list itself —
+something a real, external, VST2-loaded plugin (including ours) structurally cannot get MPC to do,
+since that path never calls `effGetParameterProperties`. Conclusion unchanged: for a real plugin, the
+native picker is not available — this only rules out one theory for why *stock* skins can use it.
 
 ## VST3: not supported by MPC OS (checked on a Force, OS base 5.0.17, 2026-09-24, `tools/probe_device.sh`)
 MPC's JUCE host has only `juce::VSTPluginFormat` compiled in. The binary has no `VST3PluginFormat` /
