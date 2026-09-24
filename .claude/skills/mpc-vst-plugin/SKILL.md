@@ -103,11 +103,14 @@ and look at it. Skin-only changes need no restart.
   and `get=` (paired with the widget's own separate "Text" handle) can display a different key than the one
   it steps -- both needed together when the DSP's stepping verb and its human-readable name live on
   different params.
-- **One Q-Link bank per tab, always** -- if a tab's control count would otherwise force a second Q-Link
-  bank, MPC still shows its own sub-page navigation UI (dots/arrows) even when both banks render identical
-  content, which reads as broken. Prefer curating each tab down to <=16 Q-Link-worthy controls (a priority
-  ranking -- knobs/levels first, enums/time-stage controls next, toggles/buttons last -- picks which ones
-  keep a physical knob; everything else stays touch-only) over ever letting a tab spill into a second bank.
+- **Consider one Q-Link bank per tab.** If a tab's control count forces a second Q-Link bank, MPC shows its
+  own sub-page navigation UI (dots/arrows) even when both banks render identical content, which can read as
+  broken -- so if a tab needs to be capped to one bank, curate it down to <=16 Q-Link-worthy controls (a
+  priority ranking -- knobs/levels first, enums/time-stage controls next, toggles/buttons last -- picks which
+  ones keep a physical knob; everything else stays touch-only). This is a per-port call, not a fixed rule:
+  a tab where sub-page navigation is genuinely useful (distinct content per bank, not just overflow) or where
+  full knob coverage matters more than avoiding the nav UI can keep multiple banks. Confirm with the user
+  before capping a busy tab, since it trades away physical-knob access to some controls.
 - `tools/bench.sh` understates CPU cost for a plugin whose real work runs on an independently wall-clock-paced
   background thread: the bench harness has no pacing and races through blocks far faster than real time. For
   such a plugin, sample real cost live instead: `/proc/<pid>/task/<tid>/stat` deltas against `/proc/uptime`
