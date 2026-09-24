@@ -268,6 +268,21 @@ Google Fonts' GitHub repo (`raw.githubusercontent.com/google/fonts/main/ofl/<nam
 is a reliable direct-download source when `fonts.google.com/download` itself returns an HTML page,
 not a zip, for the same request.
 
+## A static param bound silently clamps a value the DSP tracks dynamically (2026-09-24, jv880)
+`preset`'s declared VST range was `min=0, max=127` (an early guess, back when only internal patches
+were being tested). The real total is 4133 once all 19 SR-JV80 expansions are loaded on this
+device (`get_param("total_patches")` has the live number). Any patch index above 127 -- which is
+almost every expansion-backed patch, since internal-only patches stop at 191 and expansions start
+past that -- got silently CLAMPED back to 127 by the step_target mechanism's own
+`if (cur > tp->max) cur = tp->max`, landing in "Preset B"'s own internal-bank range. From the
+user's side this read as "stepping patches while in an expansion keeps reverting to Preset B" --
+a real, reproducible bug, not a display glitch, and the DSP's own num-patches count was never wrong;
+only the WRAPPER's static idea of the param's range was. Same caveat as `expansion_index`'s
+declared range: a VST param's bound is fixed at build time, but the real count is device/ROM-set-
+dependent, so this needed a generously oversized static max (8191), not the exact number -- a
+future refinement could read the live count via `get_param("total_patches")` at clamp time instead
+of trusting the static declaration, for a port where this matters more precisely.
+
 ## A readout bound elsewhere (get=) needs audioMasterUpdateDisplay to ever refresh (2026-09-24, jv880)
 Found live on a real device: patch_name/bank_name-style readouts (a stepper's get= binds its
 displayed text to a DIFFERENT param than the one it steps, via a separate "Text" handle -- see the
