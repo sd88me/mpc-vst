@@ -39,16 +39,23 @@ W, H, Y_OFF = 1280, 628, 86
 PLATE, INK, INK_DIM, ACCENT, ACCENT_HI = "131211", "efe9d8", "8f8878", "c1552f", "e2793f"
 SEG_ON, SEG_OFF, SEG_ON_TX = "f2f1ee", "050403", "1c1a17"
 LCD, LINE, BTN_BG, BTN_TEXT, BOX = "1a120d", "2a2823", "", "fdf3ea", "1f1f1f"
+DISPLAY_INK = "cdeb63"   # theme_display_ink: live-text colour over a dotreadout/dotstepper (see readout/stepper below)
 TD3 = False   # style=td3: frames are filled boxes, so widget crops sit on BOX, not the page bg
 FRAMES = 128               # filmstrip frames (stock strips: 128, numFrames 127)
 KNOB_QLINKS = [13, 9, 5, 1, 14, 10, 6, 2]
 CONTROL_KINDS = ("knob", "slider_v", "slider_h", "toggle", "button", "enum_h", "enum_v", "readout", "stepper", "list", "menu")
 THEME_KEYS = {"bg": "PLATE", "ink": "INK", "ink_dim": "INK_DIM", "accent": "ACCENT", "accent_hi": "ACCENT_HI",
               "seg_active": "SEG_ON", "seg_inactive": "SEG_OFF", "seg_active_tx": "SEG_ON_TX",
-              "lcd": "LCD", "line": "LINE", "btn_bg": "BTN_BG", "btn_text": "BTN_TEXT", "box": "BOX"}
+              "lcd": "LCD", "line": "LINE", "btn_bg": "BTN_BG", "btn_text": "BTN_TEXT", "box": "BOX",
+              "display_ink": "DISPLAY_INK"}
 
 
-def text_width(s, scale=1.5):          # render_conf_preview.c text_width()
+def text_width(s, scale=1.15):          # sizes a button's TUI.json bounds; must use the same SCALE as
+                                         # widget_button()'s own draw call there (render_conf_preview.c).
+                                         # That C text_width() now advances per glyph's real ink width
+                                         # (proportional spacing, not a flat 10px/char cell), which this
+                                         # flat estimate deliberately over-sizes for -- safe (padding, no
+                                         # clipping), just not worth porting the glyph-width table for.
     return int(len(s) * 10 * scale - scale)
 
 
@@ -151,20 +158,29 @@ def seg_rects(w):
     return out
 
 
+LABEL_SCALE = 1.15   # was 1.5: the baked bitmap font (font8x8.h) IS mixed-case (has a-z), but at
+                      # 1.5x its fixed monospace cell (10px/char * scale) read as too wide/shouty
+                      # when paired with Title Case text -- see docs/NOTES.md. Only affects control
+                      # name labels drawn via this function (shadow_art.c's own "text" command);
+                      # frame titles use force-shadow's shared frame_box(), which this repo doesn't
+                      # own and doesn't change.
+
+
 def label_cmds(w):
-    """Static text baked into the page background."""
+    """Static text baked into the page background. knob/toggle/slider names come from a
+    native Label 'Name' component instead (device-rendered Titillium Web -- see build()'s
+    knob/toggle/slider defs and _name_label()), so this only bakes text where there's no
+    single parameter index a native Name label could bind to: frame titles, group labels on
+    enum_h/enum_v (whose per-OPTION segment text has no such binding either)."""
     k, lab = w["kind"], w.get("label", "")
-    if k == "knob":
-        return ["text|%d|%d|1.5|%s|%s" % (w["cx"], w["cy"] + w["r"] + 12, INK, lab)]
-    if k == "toggle":
-        return ["text|%d|%d|1.5|%s|%s" % (w["cx"], w["cy"] + 13 + 10, INK, lab)]
-    if k in ("slider_v", "slider_h"):
-        return ["text|%d|%d|1.5|%s|%s" % (w["cx"], w["cy"] + w["h"] // 2 + 10, INK, lab)]
+    if not lab or k in ("knob", "toggle", "slider_v", "slider_h"):
+        return []   # an empty TEXT field is swallowed by shadow_art's strtok, so skip the command entirely
+    s = LABEL_SCALE
     if k == "enum_h":
-        return ["text|%d|%d|1.5|%s|%s" % (w["cx"], w["cy"] - 33 // 2 - 22, INK, lab)]
+        return ["text|%d|%d|%s|%s|%s" % (w["cx"], w["cy"] - 33 // 2 - 22, s, INK, lab)]
     if k == "enum_v":
         n = len(w["options"])
-        return ["text|%d|%d|1.5|%s|%s" % (w["cx"], w["cy"] - (n * 32) // 2 - 24, ACCENT_HI, lab)]
+        return ["text|%d|%d|%s|%s|%s" % (w["cx"], w["cy"] - (n * 32) // 2 - 24, s, ACCENT_HI, lab)]
     return []
 
 
@@ -206,11 +222,21 @@ def _focus(w, h):
                 _bounds(0, 0, w, h, visible="WhenFocussed"), "Focus")
 
 
-def _value_label(x, y, w, h, size, colour, just="horizontallyCentred verticallyCentred"):
+def _value_label(x, y, w, h, size, colour, just="horizontallyCentred verticallyCentred", handle="Data"):
     return _sub("Label", {"version": 1, "textStyle": {"version": 1, "font": {"version": 1, "name": "Titillium Web",
                                                                          "style": "SemiBold", "height": size},
                                                    "colour": "ff" + colour, "justification": just, "case": "Original"},
-                          "type": "Value", "handleName": "Data"}, _bounds(x, y, w, h), "Value")
+                          "type": "Value", "handleName": handle}, _bounds(x, y, w, h), "Value")
+
+
+def _name_label(x, y, w, h, size, colour, just="horizontallyCentred verticallyCentred"):
+    """Control name via MPC's OWN native Titillium Web renderer (the assigned parameter's
+    name, i.e. PARAMS[i].name from params.h) -- genuinely proportional, device-rendered text,
+    unlike shadow_art.c's baked 9x9 bitmap font (see docs/NOTES.md's font-spacing entries)."""
+    return _sub("Label", {"version": 1, "textStyle": {"version": 1, "font": {"version": 1, "name": "Titillium Web",
+                                                                         "style": "SemiBold", "height": size},
+                                                   "colour": "ff" + colour, "justification": just, "case": "Original"},
+                          "type": "Name", "handleName": "Data"}, _bounds(x, y, w, h), "Name")
 
 
 def _button(on_img, off_img, bid, n, w, h, x=0, y=0):
@@ -219,10 +245,16 @@ def _button(on_img, off_img, bid, n, w, h, x=0, y=0):
                 _bounds(x, y, w, h), "Button")
 
 
-def _placed(ctype, name, index, x, y, w, h, focus="Yes"):
+def _placed(ctype, name, index, x, y, w, h, focus="Yes", extra=None):
+    """extra: {handle_name: param_index} for sub-widgets bound to a DIFFERENT parameter than the
+    main "Data" handle -- e.g. a stepper's Q-Link/inc-dec target vs. the text it displays (that
+    sub's def must itself use handleName=extra's key, see the stepper's "Text" label)."""
+    m = [{"key": "Data", "value": "Parameter %d" % index}]
+    for hname, hindex in (extra or {}).items():
+        m.append({"key": hname, "value": "Parameter %d" % hindex})
     return {"version": 2,
             "componentData": {"version": 1, "name": name, "type": ctype, "data": {"version": 1, "handleName": "Data"}},
-            "handle remapping": {"version": 1, "map": [{"key": "Data", "value": "Parameter %d" % index}]},
+            "handle remapping": {"version": 1, "map": m},
             "bounds": _bounds(x, y - Y_OFF, w, h, focus=focus, show="Hide")}
 
 
@@ -253,6 +285,8 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
             need = list_keys(w) if w["kind"] == "list" else [k]
             if w["kind"] == "stepper":
                 need += [k + "_prev", k + "_next"]
+                if w.get("get"):
+                    need.append(w["get"])
             for nk in need:
                 if nk not in index:
                     raise SystemExit("layout: key %r is not a plugin parameter" % nk)
@@ -270,10 +304,12 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
         script.append("clear|" + PLATE)
         for w in tab["widgets"]:
             if w["kind"] == "frame":
-                script.append("frame|%d|%d|%d|%d|%s" % (w["x"], w["y"], w["w"], w["h"], w.get("title", "")))
+                script.append("frame|%d|%d|%d|%d|%s" % (w["x"], w["y"], w["w"], w["h"], w.get("title") or "-"))
             elif w["kind"] in ("readout", "stepper", "menu"):
-                script.append("%s|%d|%d|%d|%d|%s" % ("readout" if w["kind"] == "menu" else w["kind"],
-                                                     w["cx"], w["cy"], w["w"], w["h"], w.get("label") or "-"))
+                op = "readout" if w["kind"] == "menu" else w["kind"]
+                if w["kind"] in ("readout", "stepper") and w.get("style") == "dotmatrix":
+                    op = "dot" + op
+                script.append("%s|%d|%d|%d|%d|%s" % (op, w["cx"], w["cy"], w["w"], w["h"], w.get("label") or "-"))
             elif w["kind"] == "list":
                 for (x, y, tw, th) in list_tiles(w):
                     script.append("tile|%d|%d|%d|%d|%s|%s|0" % (x, y, tw, th, LCD, LINE))
@@ -291,7 +327,9 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
             if kind == "knob":
                 r = w["r"]
                 s, cw = 2 * r + 10, max(130, 2 * r + 10)   # value label width; LFO knobs sit 138 px apart
-                ch = s // 2 + r + 29 + 24
+                name_y, name_h = s // 2 + r + 2, 20
+                value_y = name_y + name_h + 2
+                ch = value_y + 26 + 6
                 radii.add(r)
                 key = "shKnob%d" % r
                 defs.setdefault(key, _local(key, [_action("Mouse Down", "Q-Link"),
@@ -301,13 +339,14 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                     _sub("Knob", {"version": 5, "knobType": "FilmStrip", "filmStrip": "sh_knob_r%d.png" % r,
                                   "numFrames": FRAMES - 1, "invert": False, "dragOrientation": "Vertical",
                                   "handleName": "Data"}, _bounds((cw - s) // 2, 0, s, s), "Knob"),
+                    _name_label(0, name_y, cw, name_h, 17.0, INK),
                     _sub("Label", {"version": 1, "textStyle": {"version": 1, "font": {"version": 1, "name": "Titillium Web",
                                                                                      "style": "SemiBold", "height": 22.0},
                                                                "colour": "ff" + INK_DIM,
                                                                "justification": "horizontallyCentred verticallyCentred",
                                                                "case": "Upper Case"},
                                    "type": "Value", "handleName": "Data"},
-                         _bounds(0, s // 2 + r + 27, cw, 26), "Value")]))
+                         _bounds(0, value_y, cw, 26), "Value")]))
                 kids.append(_placed(key, name, i, w["cx"] - cw // 2, w["cy"] - s // 2, cw, ch))
             elif kind == "toggle":
                 key = "shToggle"
@@ -316,8 +355,9 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                         script += ["clear|" + under(), "pill|100|100|%d" % on,
                                    "crop|%s|74|86|53|29" % art("sh_pill_%s" % ("on" if on else "off"))]
                     defs[key] = _local(key, [_action("Mouse Down", "Q-Link"), _action("Enter Pressed", "Toggle Switch")],
-                                       [_focus(120, 56), _button("sh_pill_on.png", "sh_pill_off.png", 1, 1, 53, 29, 33, 4)])
-                kids.append(_placed(key, name, i, w["cx"] - 60, w["cy"] - 18, 120, 56))
+                                       [_focus(120, 58), _button("sh_pill_on.png", "sh_pill_off.png", 1, 1, 53, 29, 33, 4),
+                                        _name_label(0, 34, 120, 20, 15.0, INK)])
+                kids.append(_placed(key, name, i, w["cx"] - 60, w["cy"] - 18, 120, 58))
             elif kind == "button":
                 x, y, bw, bh = button_rect(w)
                 img = "sh_btn_%s_%s" % (w["key"], slug(w["label"]))
@@ -336,7 +376,9 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                 sliders.add((img, sw_, sh_, vert))
                 sq = max(sw_, sh_)   # filmstrip frames are square (as stock); padding is transparent
                 cw = max(130, sq)
-                ch = (sq - sh_) // 2 + sh_ + 27 + 26
+                name_y, name_h = (sq - sh_) // 2 + sh_ + 2, 20
+                value_y = name_y + name_h + 2
+                ch = value_y + 26 + 6
                 key = "shSlider_%s_%dx%d" % ("v" if vert else "h", sw_, sh_)
                 defs.setdefault(key, _local(key, [_action("Mouse Down", "Q-Link"),
                                                   _action("Double Click", "Show Overlay", "knob overlay"),
@@ -346,7 +388,8 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                                   "numFrames": FRAMES - 1, "invert": False,
                                   "dragOrientation": "Vertical" if vert else "Horizontal",
                                   "handleName": "Data"}, _bounds((cw - sq) // 2, 0, sq, sq), "Slider"),
-                    _value_label(0, (sq - sh_) // 2 + sh_ + 27, cw, 26, 22.0, INK_DIM)]))
+                    _name_label(0, name_y, cw, name_h, 17.0, INK),
+                    _value_label(0, value_y, cw, 26, 22.0, INK_DIM)]))
                 kids.append(_placed(key, name, i, w["cx"] - cw // 2, w["cy"] - sq // 2, cw, ch))
             elif kind == "menu":
                 x, y, rw, rh = w["cx"] - w["w"] // 2, w["cy"] - w["h"] // 2, w["w"], w["h"]
@@ -358,18 +401,26 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                 kids.append(_placed(key, name, i, x, y, rw, rh))
             elif kind == "readout":
                 x, y, rw, rh = w["cx"] - w["w"] // 2, w["cy"] - w["h"] // 2, w["w"], w["h"]
-                key = "shReadout_%dx%d" % (rw, rh)
-                defs.setdefault(key, _local(key, [], [_value_label(8, 0, rw - 16, rh, 26.0, ACCENT)]))
+                dot = w.get("style") == "dotmatrix"
+                key = "shReadout_%s%dx%d" % ("dot_" if dot else "", rw, rh)
+                defs.setdefault(key, _local(key, [], [_value_label(8, 0, rw - 16, rh, 26.0, DISPLAY_INK if dot else ACCENT)]))
                 kids.append(_placed(key, name, i, x, y, rw, rh, focus="No"))
             elif kind == "stepper":
                 x0, y0 = w["cx"] - w["w"] // 2, w["cy"] - w["h"] // 2
                 h = w["h"]
-                key = "shStepText_%dx%d" % (w["w"] - 2 * h - 6, h)
+                dot = w.get("style") == "dotmatrix"
+                # "get=<key>": the text shown can be a DIFFERENT parameter than the one Q-Link
+                # nudges (e.g. show patch_name's text while stepping the numeric preset index) --
+                # see docs/NOTES.md's "shows 0" entry. Bound to its own "Text" handle so it's
+                # independent of "Data" (the stepper's own Q-Link/inc-dec target).
+                gi = index.get(w.get("get"), i) if w.get("get") else i
+                key = "shStepText_%s%dx%d" % ("dot_" if dot else "", w["w"] - 2 * h - 6, h)
                 defs.setdefault(key, _local(key, [_action("Mouse Down", "Q-Link"),
                                                   _action("Double Click", "Show Overlay", "knob overlay")],
                                             [_focus(w["w"] - 2 * h - 6, h),
-                                             _value_label(8, 0, w["w"] - 2 * h - 22, h, 26.0, ACCENT)]))
-                kids.append(_placed(key, name, i, x0 + h + 3, y0, w["w"] - 2 * h - 6, h))
+                                             _value_label(8, 0, w["w"] - 2 * h - 22, h, 26.0, DISPLAY_INK if dot else ACCENT,
+                                                          handle="Text")]))
+                kids.append(_placed(key, name, i, x0 + h + 3, y0, w["w"] - 2 * h - 6, h, extra={"Text": gi}))
                 for side, (ax, ay, aw, ah) in zip(("prev", "next"), stepper_arrows(w)):
                     akey = "shTap_%dx%d" % (aw, ah)
                     defs.setdefault(akey, _local(akey, [_action("Enter Pressed", "Toggle Switch")],

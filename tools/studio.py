@@ -426,7 +426,7 @@ def from_svg(svg_path):
 
 def preview(skin_dir, out_pattern, frame=40):
     """Composite a built skin into PNGs (what MPC should draw), one per page. Needs Pillow."""
-    from PIL import Image, ImageDraw
+    from PIL import Image, ImageDraw, ImageFont
     t = json.load(open(os.path.join(skin_dir, "TUI.json")))["pageData"]
     defs = {d["key"]: d["value"] for d in t["componentDefinitions"]["localComponentDefinitions"]}
     xywh = lambda b: [int(float(v)) for v in b["bounds"].split()]
@@ -453,7 +453,24 @@ def preview(skin_dir, out_pattern, frame=40):
                     if img:
                         im.paste(Image.open(os.path.join(skin_dir, img)).convert("RGB"), (x + sx, y + sy))
                 elif sd["type"] == "Label":
-                    dr.rectangle([x + sx, y + sy, x + sx + sw - 1, y + sy + sh - 1], outline=(70, 110, 160))
+                    # "Name" labels show the real, device-rendered Titillium Web text on MPC
+                    # (proportional, not shadow_art.c's baked bitmap font); approximate with
+                    # Pillow's own bundled scalable font so layout/spacing can be sanity-checked
+                    # offline (not pixel-identical to Titillium Web -- see docs/NOTES.md).
+                    # "Value" labels show a live number unavailable at preview time, so stay an
+                    # outline placeholder.
+                    if sd["data"].get("type") == "Name":
+                        text = cd.get("name", "")
+                        ts = sd["data"]["textStyle"]
+                        colour = ts["colour"]
+                        rgb = tuple(int(colour[i:i + 2], 16) for i in (2, 4, 6)) if len(colour) >= 8 else (200, 200, 200)
+                        font = ImageFont.load_default(size=int(ts["font"]["height"]))
+                        bbox = dr.textbbox((0, 0), text, font=font)
+                        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+                        dr.text((x + sx + (sw - tw) // 2 - bbox[0], y + sy + (sh - th) // 2 - bbox[1]),
+                                text, font=font, fill=rgb)
+                    else:
+                        dr.rectangle([x + sx, y + sy, x + sx + sw - 1, y + sy + sh - 1], outline=(70, 110, 160))
         qx, qy, qw, qh = [int(v) for v in tab["qlinkBoundsData"][0].split()]
         dr.rectangle([qx, qy, qx + qw, qy + qh], outline=(80, 200, 120))
         out = out_pattern % n

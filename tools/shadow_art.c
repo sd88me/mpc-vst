@@ -18,6 +18,8 @@
  *   theme|conf                        apply a conf's style=/theme_* lines (render_conf_preview's load_conf)
  *   readout|cx|cy|w|h|LABEL           readout box + label, no text (MPC draws the live value)
  *   stepper|cx|cy|w|h|LABEL           < box > stepper + label, no text
+ *   dotreadout|cx|cy|w|h|LABEL        dot-matrix LCD readout (JV-880-style), same "no text" convention
+ *   dotstepper|cx|cy|w|h|LABEL        dot-matrix LCD stepper, same "no text" convention
  *   tile|x|y|w|h|FILL|BORDER|bw       list tile: fill, then a border of bw px (0 = the plate-line rules)
  *   sstrip|out.ppm|w|h|frames|v|RRGGBB  slider filmstrip (frames x w*h, stacked vertically); v=1 vertical
  */
@@ -63,6 +65,32 @@ static void pill(int cx, int cy, int on) {
 
 static void clear(uint32_t c) {
     fill_rect(0, 0, LAND_W, LAND_H, c);
+}
+
+/* Self-contained dot-matrix readout/stepper for use INSIDE a plugin's own
+ * canvas, unlike widget_readout()/widget_stepper()'s G_DSP branch (only
+ * force_shadow.c's outer chrome, cy < TOPBAR_H, ever hits that). MPC skins
+ * have no such chrome band -- our own "topbar" IS part of the tab -- so
+ * this bakes the same bezel + dot_cell_fit() look at any position, gated
+ * only by theme_*'s dot-matrix colours (set regardless of topbar_style so
+ * this works even where render_conf_preview.c's own G_DSP stays off). */
+static void dot_readout(int cx, int cy, int w, int h, const char *label) {
+    int x0 = cx - w / 2, y0 = cy - h / 2;
+    if (label[0]) draw_text(x0, y0 - 22, label, 1.5f, INK_DIM);
+    fill_rr(x0 - 4, y0 - 4, w + 8, h + 8, 8, DSP_BEZEL);
+    dot_cell_fit(x0, y0, w, h, "", DSP_CELL, DSP_OFF, DSP_INK);
+}
+
+static void dot_stepper(int cx, int cy, int w, int h, const char *label) {
+    int x0 = cx - w / 2, y0 = cy - h / 2;
+    if (label[0]) draw_text(x0, y0 - 22, label, 1.5f, INK_DIM);
+    fill_rr(x0 - 4, y0 - 4, w + 8, h + 8, 8, DSP_BEZEL);
+    fill_rr(x0, y0, h, h, 5, DSP_BEZEL);
+    fill_rr(x0 + w - h, y0, h, h, 5, DSP_BEZEL);
+    draw_arrow(x0 + h / 2, cy, h / 4, -1, DSP_BG);
+    draw_arrow(x0 + w - h / 2, cy, h / 4, 1, DSP_BG);
+    int bx = x0 + h + 3, bw = w - 2 * h - 6;
+    dot_cell_fit(bx, y0, bw, h, "", DSP_CELL, DSP_OFF, DSP_INK);
 }
 
 static void strip(const char *path, int r, int frames, uint32_t bg) {
@@ -126,11 +154,13 @@ int main(void) {
         else if (!strcmp(op, "seg") && n == 8) {
             int x = atoi(a[1]), y = atoi(a[2]), w = atoi(a[3]), h = atoi(a[4]);
             fill_rect(x, y, w, h, HEX(a[5]));
-            draw_text_c(x + w / 2, y + h / 2 - 6, a[7], 1.5f, HEX(a[6]));
+            draw_text_c(x + w / 2, y + h / 2 - 6, a[7], 1.15f, HEX(a[6]));   /* was 1.5f, see shadow_skin.py's LABEL_SCALE */
         }
         else if (!strcmp(op, "theme") && n == 2) load_conf(a[1]);
         else if (!strcmp(op, "readout") && n == 6) widget_readout(atoi(a[1]), atoi(a[2]), atoi(a[3]), atoi(a[4]), a[5][0] == '-' ? "" : a[5], "");
         else if (!strcmp(op, "stepper") && n == 6) widget_stepper(atoi(a[1]), atoi(a[2]), atoi(a[3]), atoi(a[4]), a[5][0] == '-' ? "" : a[5], "");
+        else if (!strcmp(op, "dotreadout") && n == 6) dot_readout(atoi(a[1]), atoi(a[2]), atoi(a[3]), atoi(a[4]), a[5][0] == '-' ? "" : a[5]);
+        else if (!strcmp(op, "dotstepper") && n == 6) dot_stepper(atoi(a[1]), atoi(a[2]), atoi(a[3]), atoi(a[4]), a[5][0] == '-' ? "" : a[5]);
         else if (!strcmp(op, "tile") && n == 8) {
             int x = atoi(a[1]), y = atoi(a[2]), w = atoi(a[3]), h = atoi(a[4]), bw = atoi(a[7]);
             fill_rect(x, y, w, h, HEX(a[5]));
