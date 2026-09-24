@@ -225,6 +225,55 @@ so every control ends up in some bank and each bank reads as one coherent area (
 tabs split cleanly into "Wave/Pitch + Pitch Env" / "Filter Env + Amp Env" / "LFO 1 + LFO 2", 44
 controls in 3 evenly-sized banks instead of losing everything past the first section).
 
+## Stepper "_prev"/"_next" needs a real DSP verb, or a step_of/step_delta opt-in (2026-09-24, jv880)
+A stepper's arrows were bound to "<key>_prev"/"<key>_next" as if the DSP understood those literal
+keys as increment/decrement verbs -- it doesn't have to. jv880's `preset` has no such verb (only an
+absolute `set_param("preset", N)`), so the arrows silently did nothing (confirmed on device, then
+root-caused and fixed before touching it again). Two independent fixes, both needed depending on
+what the DSP actually offers:
+- **A real verb under a different name** (jv880's bank: `next_bank`/`prev_bank`): give `stepper` an
+  explicit `prev=<key>`/`next=<key>` override (mirrors Force Shadow's own shadow_page.conf attribute
+  of the same name) so the arrows call the real verb directly, while the stepper's own `key` can be
+  an inert dummy (Q-Link nudge on it is a no-op).
+- **No verb at all** (jv880's preset): a param can declare `"step_of": "<key>", "step_delta": N`
+  (gen_vst.py, -> `param_t.step_target`/`step_delta`) to nudge that OTHER param by a fixed amount
+  instead -- the wrapper reads its current value straight from the DSP, adds the delta, clamps to
+  its min/max, and sets it back. This trigger's own key is never sent to the DSP at all.
+Verified against real ROMs on x86 before redeploying: `preset_next` x3 advances the patch (name
+text updates each step), `preset_prev` reverses it, `next_bank` switches banks with `patch_name`
+updating to match.
+
+## Q-Link banks used to share one screen; frames must stay atomic across banks (2026-09-24, jv880)
+Every Q-Link bank of a multi-bank tab rendered the SAME screen -- only the physical Q-Link mapping
+differed underneath (`build()`'s `componentsData` was one `kids` list built once per TAB and reused
+for every bank's page def). Fine for a stock skin that only ever uses one bank per tab, but not a
+real multi-page design (confirmed via user feedback + an offline preview: Play/Sends both showed
+Output+Macros+Effect Sends together). Fixed: widgets are grouped into frame-based segments, and each
+bank's page gets its OWN background + component list, containing only the frame(s) that have a key
+in that bank (a `persistent=1` readout/stepper, e.g. a tab-level bank/patch bar, opts into every
+bank without needing its own frame). This makes frame membership a hard constraint: `make_banks()`
+(the port's own converter) must never split one frame's keys across two banks, or `build()`'s
+"include a frame if ANY of its keys are in this bank" rule pulls the WHOLE frame into both (found
+exactly this way: Effect Sends' reverb key had been grouped into the Play bank, so the Sends bank,
+which had the frame's OTHER keys, showed the whole frame too -- chorus/tones included).
+
+## Optional real-TrueType frame titles (2026-09-24, jv880)
+shadow_art.c's baked 9x9 bitmap font, even Title-Cased and tightened (see the font-spacing entries
+above), is blocky pixel art, not a real typeface -- there's a ceiling on how good "normal typed
+spacing" can look baked that way. `vst.json`'s optional `"title_font"` (a `.ttf`/`.otf` path) makes
+`shadow_skin.py` draw frame titles with a real font via Pillow instead: the background script emits
+`frameblank` (box only, no baked text) and a PIL pass draws the title afterward once the PNG exists.
+Off by default (`SHADOW_TITLE_FONT` unset) -- every existing port keeps its exact current look.
+Google Fonts' GitHub repo (`raw.githubusercontent.com/google/fonts/main/ofl/<name>/<Name>-Regular.ttf`)
+is a reliable direct-download source when `fonts.google.com/download` itself returns an HTML page,
+not a zip, for the same request.
+
+## Dotted-arc knobs (2026-09-24, jv880)
+shadow_art.c's `knob_body()` drew a solid ring; changed to a dotted arc (dot count/size scale with
+radius) to match the JV-880 shadow mockups' "dark knob, green dotted arc, small pointer" look. Only
+in shadow_art.c (this repo's own offline asset renderer) -- force-shadow's shared, on-device
+`render_conf_preview.c` keeps its plain ring, so this doesn't touch how any real Force page looks.
+
 ## No draggable/graph widgets in plugin skins (checked 2026-09-24)
 Pulled and inspected several stock `TUI.json` skins off the device, including AIR's own **TubeSynth**
 (which has real ADSR envelopes) and **Electric**/**Hype**. The full set of distinct `type` values across
