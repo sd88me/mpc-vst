@@ -38,7 +38,8 @@ for the pattern). This applies to every future port, not just ones that hit the 
       show up as MPC crashing when the plugin loads.
 - [ ] Per-instance state; several instances may run at once.
 - [ ] State saved via chunks (`effGetChunk`/`effSetChunk`).
-- [ ] Offline x86 test: instances, parameter round-trip, MIDI → audio, chunk restore, under ASan.
+- [ ] Offline x86 test: `tools/test_port.sh <port>/vst.json` prints PASSED (instances, parameter round-trip,
+      options, popups, MIDI → audio, chunk restore, under ASan).
 
 ## 2. Parameters
 - [ ] Stable order (the VST index is what skins and projects bind to). Append only; never reorder a shipped plugin.

@@ -3,6 +3,7 @@
 
     gen_vst.py <port>/vst.json            -> <port>/build/params.h, skin/<vendor> - VST - <name>/, pluginlist-entry.xml
     gen_vst.py <port>/vst.json --shell    print the build settings as shell variables (for build_port.sh)
+    gen_vst.py <port>/vst.json --params-h only <port>/build/params.h (no skin; for tools/test_port.sh)
 
 vst.json (paths are relative to the vst.json's folder):
     {
@@ -142,6 +143,8 @@ def main():
     os.makedirs(build, exist_ok=True)
     gen_params(cfg, plist, os.path.join(build, "params.h"))
     print("params.h: %d params" % len(plist))
+    if sys.argv[2:] == ["--params-h"]:
+        return
     open(os.path.join(build, "pluginlist-entry.xml"), "w").write(entry(cfg) + "\n")
 
     if cfg.get("layout"):

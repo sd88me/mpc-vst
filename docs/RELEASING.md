@@ -6,7 +6,8 @@ requirements, CPU result, checksums).
 
 ## Checklist
 1. **Build** with the port's `build.sh` (armhf, `arm32v7/gcc:12`; highest GLIBC symbol ≤ 2.36).
-2. **Host test** (x86, ASan): `tools/host_test.c` or the port's own test. It must be clean.
+2. **Host test** (x86, ASan): `tools/test_port.sh <port>/vst.json` (must print PASSED), or the port's own test for a
+   hand-written wrapper. It must be clean.
 3. **Skin preview**: `tools/studio.py preview "<skin>/Plugin Skins" -o page_%d.png`, and look at every page.
 4. **CPU**: `tools/bench.sh build/x.so <ip> -j | tee build/bench.txt`. It must PASS, or WARN with a note
    (docs/BENCH.md).

@@ -18,6 +18,4 @@ Use it by naming the module in the port's `vst.json` instead of `"params"`:
 `tools/build_port.sh` then links `schwung_engine.c`, and `gen_vst.py` / `studio.py` read `module.json`.
 The module's own sources go in `build.sources` as usual.
 
-Offline host test (`tools/host_test.c`): compile this adapter in alongside `wrapper/vst2_wrap.c` and the
-module's sources, e.g. `gcc -fsanitize=address -I<port>/build tools/host_test.c wrapper/vst2_wrap.c
-adapters/schwung/schwung_engine.c <module sources> -lm`.
+Offline host test: `tools/test_port.sh <port>/vst.json` links this adapter in automatically.

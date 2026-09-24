@@ -27,8 +27,9 @@ Stop any separately attached audio engines first.
    (from vst.json's `layout`, else a studio auto-layout) and `pluginlist-entry.xml`. The compile uses
    `arm32v7/gcc:12` (glibc ≤ 2.39), `-fvisibility=hidden -shared -fPIC`, and links `wrapper/vst2_wrap.c` from this repo.
 3. **Bench**: `tools/bench.sh build/x.so <ip>` must PASS before release (docs/BENCH.md).
-4. **Offline test first**: `tools/host_test.c` on x86 with ASan (`gcc:12` image), checking two instances,
-   param set/get/display, note→non-zero RMS, chunk round-trip.
+4. **Offline test first**: `tools/test_port.sh <port>/vst.json` builds `tools/host_test.c` with the port's sources and
+   adapter on x86 under ASan/UBSan and must print PASSED: two instances, names, set/get, option select + nudge,
+   popup open/close, note→audio, chunk round-trip. Hand-written wrappers keep their own host test.
 5. **Deploy (staged)**: `.so` → `/sdcard/vst/x.so.new` then `mv`; skin via `tar | ssh tar -C /sdcard/Synths -xf -`
    (**don't scp paths with spaces**: escaping created a folder with literal backslashes once). Verify md5.
 6. **Register** (needs MPC restart, **ask the user first**, and stop attached voice engines such as dx7_host/maze_host first):
