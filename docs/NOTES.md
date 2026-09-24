@@ -31,27 +31,11 @@ from the Force and may differ on MPC Live/One/X/Key (e.g. `Force Documents` vs `
   Point/Red/Silver/Witch/Yellow). Bassline defines its own `btnBypass`, `comboBox`, `slider` locally;
   that's where to copy switch/button/menu definitions from.
 
-## Open issues (from first Maze Voice test)
+## Open issues (reviewed 2026-09-25)
 
-1. ~~Enums render as knobs.~~ Done: option params are radio groups of image `Button`s
-   (`buttonId` i of `numButtonsInGroup` N, all bound to the same parameter, option text drawn into our PNGs,
-   as in the stock Hype skin). A VST2 can't give MPC value lists, so `comboBox` menus open empty. Off/on params are toggle
-   buttons; `access:"write"` params are triggers (the wrapper sends `audioMasterAutomate` 0 after they fire).
-   Q-Link nudges step option params one option at a time (wrapper `setParameter`).
-   Original note: Labels are right. Next: use a `comboBox` (menu) for multi-option
-   enums and a button type (`btnBypass`-style, 2 states) for on/off and momentary (`rnd_go`).
-   Copy the definitions from Bassline's `localComponentDefinitions`, since they are local there, not
-   in the generic library.
-2. ~~Some knobs show blank~~ Done: stock knobs only draw their value; names come from background
-   art. We add `Label` `"type": "Name"`. Original note: **Some knobs on a page show blank** while their Q-Link works. Suspect: a missing `Label`
-   component (stock skins add Labels and `Focus` overlays), or knob bounds/`showWhenDataModelInvalid`.
-   Compare the rendered page against Bassline's component set.
-3. Note timing is quantised to 128-frame DSP blocks.
-4. ~~`gen_vst.py` is Maze-specific.~~ Done 2026-09-24: `tools/build_port.sh` + a per-port `vst.json`; Maze builds through
-   it byte-identically (same `.so` md5).
-5. Maze's knob-touch note filter (notes 0..9) is compiled out with `-DMAZE_VST=1`, which is built but
-   **not yet deployed** (md5 b10668a4…).
-6. **MIDI-output plugins: MPC OS ignores plugin MIDI out** (tested 2026-09-23 with `poc/midiout.c`).
+1. Note timing is quantised to 128-frame DSP blocks (the engine interface renders whole blocks; MIDI lands
+   at the start of the next one).
+2. **MIDI-output plugins: MPC OS ignores plugin MIDI out** (tested 2026-09-23 with `poc/midiout.c`).
    MPC never asks canDo `sendVstEvents`/`sendVstMidiEvent` (only `receiveVstMidiEvent`, `bypass`);
    `audioMasterProcessEvents` is accepted silently and the events go nowhere. A plugin can't be picked as
    a MIDI input on another track, and the track's "MIDI send to" only forwards the notes coming *into* it.
@@ -62,7 +46,13 @@ from the Force and may differ on MPC Live/One/X/Key (e.g. `Force Documents` vs `
    new port, creates a matching input ("<client> <port>") and connects it with no restart. Enable Track on it in
    Preferences → MIDI, then any track can select it as MIDI input. Plugin sequencers/arps can drive other tracks.
    Most likely stock MPC OS behaviour: MockbaMod's MidiLoop (`tkgl_anyctrl_lt.so`) only filters or blacklists
-   ports; it doesn't create them. Not yet confirmed on a stock unit. Latency is about one audio block (direct, unscheduled send).
+   ports; it doesn't create them. **Still unconfirmed on a stock unit.** Latency is about one audio block
+   (direct, unscheduled send).
+
+Resolved (details in the sections below): option params render as image-button radio groups or `popup`s,
+not knobs, and `comboBox` menus stay empty for VST2 (see "Native picker"); knob names come from `Label`
+`"type": "Name"`; the port builder is generic (`tools/build_port.sh` + `vst.json`, 2026-09-24); custom
+layouts render on device (every port since Maze Voice).
 
 ## Skin layout facts (verified 2026-09-23)
 
@@ -77,7 +67,7 @@ from the Force and may differ on MPC Live/One/X/Key (e.g. `Force Documents` vs `
   stock strips), and on/off images for toggles, triggers and option segments. Shadow canvas y 86..714 maps to the
   1280x628 plugin area. Several `qlinks` lines in one tab become nested pages that share the design but have
   different Q-Link sets. Values are MPC `Label` `Value` components (Titillium; the baked labels use the shadow font).
-  Not yet seen on device.
+  Seen on device with every port since.
 
 ## Beyond synths: apps as plugins (probe run on a Force 2026-09-24)
 

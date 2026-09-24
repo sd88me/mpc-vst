@@ -24,7 +24,7 @@ Gen2 devices (e.g. Live III) are reported to be more locked down.
    `Plugin Skins/TUI.json`, `Q-Links.json`) gives it a native screen. Knobs bind
    to `"Parameter N"`, which is the VST parameter index.
 
-See [docs/NOTES.md](docs/NOTES.md) for details, gotchas, and open issues.
+See [docs/NOTES.md](docs/NOTES.md) for details, gotchas, and open issues, and [docs/ROADMAP.md](docs/ROADMAP.md) for what's next.
 
 ## Layout
 
@@ -48,7 +48,8 @@ See [docs/NOTES.md](docs/NOTES.md) for details, gotchas, and open issues.
   INSTALL.md. See [docs/RELEASING.md](docs/RELEASING.md).
 - `tools/probe_device.sh`: a read-only device report (CPU, 32/64-bit MPC, audio threads, plugin formats: VST2 yes,
   VST3 no on current firmware).
-- `tools/host_test.c`: an offline x86 host test (instances, params, MIDI→audio, chunks).
+- `tools/test_port.sh` + `tools/host_test.c`: the offline x86 test of a port under ASan (instances, params, options,
+  popups, MIDI→audio, chunks), PASSED/FAILED.
 - `poc/gain.c`, `poc/synth.c`: minimal effect / instrument examples.
 - `poc/midiport.c`: a MIDI-generating plugin (tempo-synced) that drives other tracks through an ALSA port
   (MPC OS ignores VST MIDI output; `poc/midiout.c` shows that).
