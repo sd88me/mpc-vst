@@ -12,6 +12,8 @@
 <header class="ui-top">
   <div class="ui-brand">Skin Studio <span id="file" class="ui-file"></span><span id="dirty" class="ui-dirty" hidden title="Unsaved changes">●</span></div>
   <div class="ui-tools">
+    <button id="open" title="Open another layout">Open…</button>
+    <span class="ui-sep"></span>
     <button id="undo" title="Undo (Ctrl+Z)">Undo</button>
     <button id="redo" title="Redo (Ctrl+Shift+Z)">Redo</button>
     <span class="ui-sep"></span>
@@ -25,6 +27,7 @@
     <label>Zoom <select id="zoom"><option value="fit" selected>Fit</option><option value="0.5">50%</option><option value="1">100%</option><option value="1.5">150%</option></select></label>
     <span class="ui-sep"></span>
     <button id="save" class="ui-primary" title="Save the layout (Ctrl+S)">Save</button>
+    <button id="quit" title="Stop Skin Studio (the window it runs in closes too)">Quit</button>
   </div>
 </header>
 
@@ -78,6 +81,7 @@
     <div class="ui-panel" id="p-checks" hidden></div>
   </aside>
 </main>
+<div id="start" class="ui-start" hidden></div>
 <div id="toast" class="ui-toast" hidden></div>
 <script src="/web/app.js"></script>
 </body>

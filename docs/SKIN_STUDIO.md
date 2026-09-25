@@ -13,7 +13,7 @@ params ──auto──► layout.conf ──to-svg──► layout.svg ──(I
 | Step | Command | Use it when |
 |---|---|---|
 | Auto-layout | `tools/studio.py auto params.json -o layout.conf` | You want a working first page in seconds |
-| Browser editor | `tools/studio.py serve layout.conf --params params.json` | You want to lay out, restyle and check it by hand |
+| Browser editor | double-click `SkinStudio.command` / `.bat` / `.sh`, or `tools/studio.py serve [layout.conf \| vst.json]` | You want to lay out, restyle and check it by hand |
 | To SVG | `tools/studio.py to-svg layout.conf -o layout.svg --params params.json` | You want to rearrange it visually |
 | From SVG | `tools/studio.py from-svg layout.svg -o layout.conf` | You've edited the SVG |
 | Build skin | the port's gen script (`shadow_skin.write_skin(...)`) | Always last |
@@ -36,9 +36,23 @@ The tools need Python 3; the skin build and preview also need Pillow (the ports 
 - Labels are shortened to fit (an `LFO1 > ` prefix is dropped, since the frame title already says it).
 
 ## Browser editor
-`tools/studio.py serve layout.conf --params params.json` and open http://127.0.0.1:8765/. The editor needs Python 3 only
-(no Docker, Pillow or Chromium); any browser will do. A layout that doesn't exist yet starts empty. To try it, copy
-`tools/skin_template.conf` somewhere and open it with `--params tools/skin_template.params.json`.
+Double-click the launcher at the repo root: `SkinStudio.command` on macOS, `SkinStudio.bat` on Windows, `SkinStudio.sh`
+on Linux (run it from the file manager, or `./SkinStudio.sh`). It opens the editor in your default browser; keep the
+window it runs in open while you edit, and use **Quit** in the page (or close that window) to stop it. It needs
+Python 3 only (python.org; on Windows tick "Add python.exe to PATH"), no Docker, Pillow or Chromium.
+- macOS: the first time, right-click the launcher, **Open**, then **Open** again if macOS says it's from an
+  unidentified developer.
+- Windows: drop a `layout.conf` or a port's `vst.json` on `SkinStudio.bat` to open it straight away.
+
+The start screen lists recent layouts and has a folder browser. Click a `.conf` to edit it, or a port's `vst.json` to
+edit its layout with its parameters (a port without a layout gets a first-pass one from `auto`; add `"layout":
+"layout.conf"` to its vst.json so the build uses it). **New layout in this folder** makes an empty one or one from a
+parameter file. The parameter file is found for you: the vst.json that names the layout, else `<name>.params.json` or
+`params.json` next to it. **Open…** switches layouts. Recent layouts are kept in `~/.mpc-skin-studio.json`.
+
+From a terminal: `tools/studio.py serve [layout.conf | vst.json] [--params params.json] [--open]` (port 8765, or the
+next free one). To try the editor, copy `tools/skin_template.conf` and `tools/skin_template.params.json` into a folder
+as `layout.conf` and `params.json` and open it.
 
 - **The canvas is the skin.** Each widget is drawn with the browser renderer's own SVG and stylesheets
   (`tools/html_art.py`, `default.css`, the layout's `art_css=`), so it looks like a `"art": "html"` build. MPC's own text
@@ -66,7 +80,9 @@ The tools need Python 3; the skin build and preview also need Pillow (the ports 
   original as `layout.conf.bak`. Lines you didn't change are written back exactly as they were, comments included;
   a changed line is rewritten in `from-svg`'s format. Undo/redo cover every edit.
 
-The server listens on 127.0.0.1 only (`--host` to change it) and reads and writes files only in the layout's folder.
+The server listens on 127.0.0.1 only (`--host` to change it) and answers only requests addressed to this machine.
+It reads and writes files only in the open layout's folder; the start screen can list any folder and open or create
+a layout there.
 
 ## Inkscape (or Penpot) round trip
 - Open `layout.svg` in Inkscape. Each tab is a **layer** (`tab <NAME>`); only the first is visible,

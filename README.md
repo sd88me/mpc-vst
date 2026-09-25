@@ -23,6 +23,8 @@ Working today:
 - **A porting kit**: describe an engine's parameters in one small file and the tools build the plugin, its page and
   its Q-Link map, test it on a PC, check its CPU cost on the device, and package it as a shareable zip with an
   installer.
+- **Skin Studio**, a page editor in your browser: double-click `SkinStudio.command` (macOS), `SkinStudio.bat`
+  (Windows) or `SkinStudio.sh` (Linux). It needs Python 3. See [docs/SKIN_STUDIO.md](docs/SKIN_STUDIO.md).
 
 Ports built with it (each in its own repo) very much alpha drafts, not yet polished:
 
@@ -132,8 +134,8 @@ What's next is in [docs/ROADMAP.md](docs/ROADMAP.md).
 - `tools/html_art.py` + `tools/html_art/`: the optional browser renderer for skin artwork (`"art": "html"`):
   the same layouts drawn as SVG/CSS in headless Chromium, restyled per port with a stylesheet.
 - `tools/studio.py` + `tools/skin_template.svg`: the skin studio. Auto-layout from a port's
-  parameters, a browser editor (`studio.py serve`, `tools/studio_web/`), an Inkscape/Penpot SVG round trip, and page
-  previews. See [docs/SKIN_STUDIO.md](docs/SKIN_STUDIO.md).
+  parameters, a browser editor (`studio.py serve`, `tools/studio_web/`, started by the `SkinStudio.*` launchers), an
+  Inkscape/Penpot SVG round trip, and page previews. See [docs/SKIN_STUDIO.md](docs/SKIN_STUDIO.md).
 - `tools/test_port.sh` + `tools/host_test.c`: the offline x86 test of a port under ASan (instances, params, options,
   popups, MIDI→audio, legacy `process()`, chunks), PASSED/FAILED.
 - `tools/bench.sh` + `tools/bench.c`: a CPU stress test run on the device, with a PASS/WARN/FAIL verdict for Gen1

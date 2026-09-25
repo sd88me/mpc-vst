@@ -28,7 +28,9 @@ Building on parameter-driven visibility (`IndexedEnabling`, NOTES "Conditional v
 ## Done
 - [x] Browser editor for layouts, `studio.py serve` (2026-09-25): canvas drawn by the browser renderer, move/resize,
       inspector, tabs, modes, Q-Link sets, theme colours, `art_css` editing with fonts, SVG art import, checks.
-      Verified offline in Chromium: load and save without edits gives the identical file.
+      Verified offline in Chromium: load and save without edits gives the identical file. Double-click launchers
+      (`SkinStudio.command` / `.bat` / `.sh`) with a start screen; the `.sh` one tested on Linux, the macOS and
+      Windows ones not yet run on those systems.
 - [x] Browser renderer (`"art": "html"`, `art_css=`), SVG background art (`art file=`, studio round trip) and
       mode panels (`when=`), offline (2026-09-25); real-font baked text comes with the browser renderer.
 - [x] Auto-layout picks `popup` for 7+ options; `wrapper/popup.h` shared by hand-written wrappers (2026-09-25).

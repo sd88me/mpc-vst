@@ -169,6 +169,7 @@ function shownInMode(w) {
 // ---------------------------------------------------------------- rendering
 
 async function refresh(opts = {}) {
+  if (!S.doc) return;
   renderTabs();
   renderModes();
   renderLayers();
@@ -488,6 +489,7 @@ function resized(w0, dx, dy) {
 
 function setupKeys() {
   document.addEventListener("keydown", e => {
+    if (!S.doc || !$("#start").hidden) return;
     const typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
     const mod = e.ctrlKey || e.metaKey;
     if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); save(); return; }
@@ -585,6 +587,7 @@ function showPanel(p) {
 }
 
 function renderPanel() {
+  if (!S.doc) return;
   ({ inspect: renderInspect, qlinks: renderQlinks, theme: renderTheme, css: renderCss, checks: renderChecks })[S.panel]();
 }
 
@@ -1113,6 +1116,7 @@ function renderChecks() {
 // ---------------------------------------------------------------- load / save
 
 async function save() {
+  if (!S.doc) return;
   try {
     const r = await api("/api/save", { head: S.doc.head, tabs: S.doc.tabs });
     const tab = S.tab;
@@ -1151,12 +1155,115 @@ function fit() {
   c.setAttribute("height", Math.round(w * 628 / 1280));
 }
 
-async function main() {
-  try { S.doc = await api("/api/doc"); } catch (e) { toast("Can't load the layout: " + e.message, true); return; }
+// ---------------------------------------------------------------- start screen: choose or create a layout
+
+function startScreen(info) {
+  S.start = { dir: info.dir, params: null, info };
+  $("#start").hidden = false;
+  browseTo(info.dir);
+}
+
+async function browseTo(dir) {
+  let r;
+  try { r = await api("/api/browse", { dir }); } catch (e) { return toast(e.message, true); }
+  S.start.dir = r.dir;
+  S.start.listing = r;
+  drawStart();
+}
+
+function drawStart() {
+  const st = S.start, info = st.info, r = st.listing, sep = info.sep || "/";
+  const box = $("#start");
+  box.innerHTML = "";
+  const card = el("div", { className: "ui-start-card" });
+  card.append(el("h1", {}, "Open a skin layout"),
+    el("p", { className: "ui-note" }, "Pick a layout (.conf) or a port's vst.json, which opens its layout with its parameters. Or start a new layout in any folder."));
+  if (info.recent && info.recent.length) {
+    const rec = el("div", { className: "ui-recent" });
+    for (const x of info.recent) {
+      rec.append(el("button", { onclick: () => openLayout({ path: x.layout, params: x.params }) },
+        x.layout.split(sep).slice(-2).join(sep), " ", el("small", {}, x.layout)));
+    }
+    card.append(el("h2", {}, "Recent"), rec);
+  }
+  card.append(el("h2", {}, "Browse"));
+  const path = el("input", { type: "text", value: r.dir, spellcheck: false });
+  path.addEventListener("keydown", e => { if (e.key === "Enter") browseTo(path.value); });
+  card.append(el("div", { className: "ui-path" },
+    el("button", { textContent: "↑ Up", disabled: !r.parent, onclick: () => browseTo(r.parent) }), path,
+    el("button", { textContent: "Go", onclick: () => browseTo(path.value) }),
+    el("button", { textContent: "Home", onclick: () => browseTo(info.home) }),
+    el("button", { textContent: "Ports", title: "The folder this repo is in (ports usually sit next to it)", onclick: () => browseTo(info.repo.split(sep).slice(0, -1).join(sep) || sep) })));
+  const ul = el("ul", { className: "ui-entries" });
+  const join = n => r.dir.replace(/[\\/]$/, "") + sep + n;
+  for (const d of r.dirs) ul.append(el("li", { className: "ui-entry", onclick: () => browseTo(join(d)) }, el("span", { className: "ui-ico" }, "▸"), el("span", { className: "ui-name" }, d)));
+  for (const f of r.files) {
+    const full = join(f.name);
+    const tag = { port: ["port", "open port"], layout: ["layout", "open"], params: ["", "use as parameters"] }[f.kind];
+    const li = el("li", { className: "ui-entry" + (st.params === full ? " ui-chosen" : "") },
+      el("span", { className: "ui-ico" }, f.kind === "params" ? "{}" : "▤"), el("span", { className: "ui-name" }, f.name),
+      el("span", { className: "ui-tag ui-" + tag[0] }, tag[1]));
+    li.onclick = () => {
+      if (f.kind === "params") { st.params = st.params === full ? null : full; drawStart(); }
+      else openLayout({ path: full, params: f.kind === "layout" ? st.params : null });
+    };
+    ul.append(li);
+  }
+  if (!r.dirs.length && !r.files.length) ul.append(el("li", { className: "ui-entry" }, el("span", { className: "ui-note" }, "Nothing to open here.")));
+  card.append(ul);
+  card.append(el("p", { className: "ui-note" }, "Parameters: ", st.params ? el("code", {}, st.params) : "found for you (from the port's vst.json, or a params.json next to the layout). Click a .json file to choose one.",
+    st.params ? el("button", { textContent: "clear", style: "margin-left:6px;padding:0 6px", onclick: () => { st.params = null; drawStart(); } }) : null));
+  // new layout
+  card.append(el("h2", {}, "New layout in this folder"));
+  const name = el("input", { type: "text", value: r.files.some(f => f.name === "layout.conf") ? "layout2.conf" : "layout.conf" });
+  const hasParams = st.params || r.files.some(f => f.kind === "params");
+  card.append(el("div", { className: "ui-newrow" }, name,
+    el("button", { textContent: "Create empty", onclick: () => openLayout({ path: join(name.value.trim()), params: st.params, create: "empty" }) }),
+    el("button", { className: "ui-primary", textContent: "Create from parameters", disabled: !hasParams,
+      title: "studio.py auto: sections become frames, 8 slots per row (a Q-Link bank)",
+      onclick: () => openLayout({ path: join(name.value.trim()), params: st.params || join((r.files.find(f => f.name === "params.json") || r.files.find(f => f.kind === "params")).name), create: "auto" }) })));
+  if (S.doc) card.append(el("div", { className: "ui-row", style: "margin-top:18px" }, el("button", { textContent: "Cancel", onclick: () => ($("#start").hidden = true) })));
+  box.append(card);
+}
+
+async function openLayout(req) {
+  try { load(await api("/api/open", req)); } catch (e) { toast(e.message, true); }
+}
+
+async function openScreen() {
+  if (S.dirty && !confirm("Leave this layout without saving?")) return;
+  try { startScreen(await api("/api/start", {})); } catch (e) { toast(e.message, true); }
+}
+
+async function quit() {
+  if ((S.dirty || (S.css.text !== null && S.css.text !== S.css.saved)) && !confirm("Quit without saving?")) return;
+  S.dirty = false;
+  S.css.text = S.css.saved;
+  try { await api("/api/quit", {}); } catch { /* already gone */ }
+  document.body.innerHTML = '<div class="ui-bye"><h1>Skin Studio stopped</h1><p>You can close this tab. Double-click the launcher to start it again.</p></div>';
+}
+
+// ---------------------------------------------------------------- load / start
+
+function load(d) {
+  Object.assign(S, { doc: d, tab: 0, sel: [], undo: [], redo: [], items: [], themeKey: "", mode: {}, qset: 0, pick: -1,
+                     css: { name: "", text: null, saved: null } });
+  S.cache.clear();
+  $$("[data-artcss]").forEach(e => e.remove());
   markLoaded();
-  $("#file").textContent = S.doc.name;
-  document.title = "Skin Studio — " + S.doc.name;
-  $("#defs").innerHTML = S.doc.defs;
+  $("#file").textContent = d.name;
+  $("#file").title = d.path + (d.params_path ? "\nparameters: " + d.params_path : "\nno parameter file");
+  document.title = "Skin Studio — " + d.name;
+  $("#defs").innerHTML = d.defs;
+  $("#start").hidden = true;
+  setDirty(false);
+  fit();
+  showPanel(S.panel);
+  refresh();
+  if (d.note) toast(d.note);
+}
+
+async function main() {
   const pal = $("#palette");
   for (const [k, label] of PALETTE) pal.append(el("button", { textContent: label, title: "Add a " + k, onclick: () => addWidget(k) }));
   $("#import-art").onclick = () => $("#art-file").click();
@@ -1164,6 +1271,8 @@ async function main() {
   $("#undo").onclick = undo;
   $("#redo").onclick = redo;
   $("#save").onclick = save;
+  $("#open").onclick = openScreen;
+  $("#quit").onclick = quit;
   $("#dup").onclick = duplicate;
   $("#del").onclick = remove;
   $("#layer-up").onclick = () => reorder(-1);
@@ -1177,7 +1286,9 @@ async function main() {
   setupKeys();
   fit();
   setDirty(false);
-  await refresh();
+  let d;
+  try { d = await api("/api/doc"); } catch (e) { toast("Can't reach Skin Studio: " + e.message, true); return; }
+  if (d.open) startScreen(d); else load(d);
 }
 
 main();

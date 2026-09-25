@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Skin studio in the browser: a local editor for layout.conf (`studio.py serve`).
 
-    studio.py serve layout.conf [--params params.json] [--port 8765] [--host 127.0.0.1]
+    studio.py serve [layout.conf | vst.json] [--params params.json] [--open] [--port 8765] [--host 127.0.0.1]
+
+Without a layout the page opens on a start screen (recent layouts, a folder browser, new layouts); a port's
+vst.json opens its layout with its parameters. The launchers at the repo root (SkinStudio.command / .bat / .sh)
+run `serve --open`, so a double-click opens the editor in the default browser.
 
 Serves tools/studio_web/ and a small JSON API. The page edits the layout; this side reads and writes it and
 draws every widget with the browser renderer's own SVG (html_art.Art, styled by tools/html_art/default.css and
@@ -13,7 +17,11 @@ header, which a page from another site can't send without a CORS preflight this 
 Standard library only.
 
 API (JSON):
-  GET  /api/doc                      the layout as a document (below), the parameters, renderer defaults
+  GET  /api/doc                      the layout as a document (below), the parameters, renderer defaults;
+                                     {open: true, recent, ...} when no layout is open yet
+  POST /api/browse {dir}             a folder's subfolders and layout / vst.json / parameter files
+  POST /api/open {path, params, create}  edit a .conf or a port's vst.json (create: "empty" | "auto")
+  POST /api/quit                     stop the server
   POST /api/render {head, widgets}   -> {vars, td3, css, items: [{svg, live, box, open}]} per widget
   POST /api/parse  {line}            -> {w} (a widget line typed by hand)
   POST /api/save   {head, tabs}      writes the layout (x.new, then renamed over it; the first save keeps x.bak)
@@ -30,6 +38,8 @@ import json
 import os
 import re
 import sys
+import threading
+import webbrowser
 from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlparse
@@ -245,20 +255,90 @@ def render(head, widgets, params, base_dir):
 
 # ---------------------------------------------------------------- server
 
+RECENT = os.path.join(os.path.expanduser("~"), ".mpc-skin-studio.json")
+REPO = os.path.dirname(HERE)
+
+
+def load_recent():
+    try:
+        with open(RECENT, encoding="utf-8") as f:
+            return [r for r in json.load(f).get("recent", []) if os.path.isfile(r.get("layout", ""))]
+    except (OSError, ValueError, AttributeError):
+        return []
+
+
+def remember(layout, params_path):
+    rs = [r for r in load_recent() if r["layout"] != layout]
+    rs.insert(0, {"layout": layout, "params": params_path or ""})
+    try:
+        with open(RECENT, "w", encoding="utf-8") as f:
+            json.dump({"recent": rs[:12]}, f, indent=1)
+    except OSError:
+        pass
+
+
+def port_config(path):
+    """A port's vst.json -> (layout path or None, params path or None), both absolute."""
+    here = os.path.dirname(os.path.abspath(path))
+    with open(path, encoding="utf-8") as f:
+        cfg = json.load(f)
+    src = cfg.get("params") or cfg.get("module")
+    return (os.path.join(here, cfg["layout"]) if cfg.get("layout") else None,
+            os.path.join(here, src) if src else None)
+
+
+def find_params(layout):
+    """The parameter file that goes with a layout: the vst.json that names it (in its folder, the two above,
+    or a folder directly inside one of those), else <stem>.params.json or params.json next to it."""
+    layout = os.path.abspath(layout)
+    d = os.path.dirname(layout)
+    ups = [d, os.path.dirname(d), os.path.dirname(os.path.dirname(d))]
+    near = []
+    for up in ups:
+        near.append(up)
+        try:
+            near += [os.path.join(up, n) for n in sorted(os.listdir(up)) if not n.startswith(".")]
+        except OSError:
+            pass
+    for folder in dict.fromkeys(near):
+        cfg = os.path.join(folder, "vst.json")
+        if not os.path.isfile(cfg):
+            continue
+        try:
+            lay, par = port_config(cfg)
+        except (OSError, ValueError, KeyError):
+            continue
+        if lay and os.path.realpath(lay) == os.path.realpath(layout) and par and os.path.isfile(par):
+            return par
+    for name in (os.path.splitext(os.path.basename(layout))[0] + ".params.json", "params.json"):
+        if os.path.isfile(os.path.join(d, name)):
+            return os.path.join(d, name)
+    return None
+
+
 class Studio:
-    def __init__(self, layout, params_path=None):
+    def __init__(self):
+        self.layout = self.dir = None
+        self.params_path, self.params, self.sections, self.by_key = None, [], [], {}
+
+    def open(self, layout, params_path=None):
+        """Edit this layout (created when missing) with these parameters (found when not given)."""
         self.layout = os.path.abspath(layout)
         self.dir = os.path.dirname(self.layout)
+        self.params_path = os.path.abspath(params_path) if params_path else find_params(self.layout)
         self.params, self.sections = [], []
-        if params_path:
-            ps, secs = studio.load_params(params_path)
+        if self.params_path:
+            ps, secs = studio.load_params(self.params_path)
             self.params = [{"key": p["key"], "name": p.get("name", p["key"]), "options": [str(o) for o in p.get("options") or []],
                             "hint": studio.kind_for(p)} for p in ps]
-            self.sections = secs
+            self.sections = secs or []
         self.by_key = {p["key"]: p for p in self.params}
+        remember(self.layout, self.params_path)
 
     def local(self, name):
         """A path inside the layout's folder, or None."""
+        if not self.dir:
+            return None
         path = os.path.realpath(os.path.join(self.dir, unquote(name)))
         return path if path == self.dir or path.startswith(self.dir + os.sep) else None
 
@@ -272,20 +352,90 @@ class Studio:
                 break
         return out
 
+    def start(self):
+        """What the start screen needs: recent layouts and where to browse from."""
+        rs = load_recent()
+        return {"open": True, "recent": rs, "home": os.path.expanduser("~"), "repo": REPO,
+                "template": os.path.join(HERE, "skin_template.conf"), "sep": os.sep,
+                "dir": os.path.dirname(rs[0]["layout"]) if rs else os.path.dirname(REPO)}
+
     def doc(self):
+        if not self.layout:
+            return self.start()
         if not os.path.exists(self.layout):
             d = {"head": [], "tabs": [{"name": "PAGE 1", "raw": "", "lines": []}]}
         else:
             d = load_doc(self.layout)
         d.update(path=self.layout, name=os.path.basename(self.layout), params=self.params, sections=self.sections,
-                 theme=html_art.THEME, defs=html_art.DEFS, css=[os.path.relpath(p, self.dir) for p in self.files((".css",))],
+                 params_path=self.params_path, theme=html_art.THEME, defs=html_art.DEFS,
+                 css=[os.path.relpath(p, self.dir) for p in self.files((".css",))],
                  art=[os.path.relpath(p, self.dir) for p in self.files((".svg",))],
                  fonts=[os.path.relpath(p, self.dir) for p in self.files((".ttf", ".otf", ".woff", ".woff2"))],
                  plugin={"w": W, "h": H, "y": Y_OFF})
         return d
 
 
-def handler(st):
+def browse(path):
+    """A folder's subfolders and the files the start screen can open."""
+    path = os.path.abspath(os.path.expanduser(path or "~"))
+    if not os.path.isdir(path):
+        path = os.path.dirname(path)
+    dirs, files = [], []
+    for n in sorted(os.listdir(path), key=str.lower):
+        if n.startswith(".") or n in ("node_modules", "__pycache__"):
+            continue
+        full = os.path.join(path, n)
+        ext = os.path.splitext(n)[1].lower()
+        if os.path.isdir(full):
+            dirs.append(n)
+        elif n == "vst.json":
+            files.append({"name": n, "kind": "port"})
+        elif ext == ".conf":
+            files.append({"name": n, "kind": "layout"})
+        elif ext == ".json":
+            files.append({"name": n, "kind": "params"})
+    parent = os.path.dirname(path)
+    return {"dir": path, "parent": parent if parent != path else None, "dirs": dirs, "files": files}
+
+
+def open_request(st, req):
+    """POST /api/open: {path (a .conf or a port's vst.json), params?, create?: "" | "empty" | "auto"}."""
+    path = os.path.abspath(os.path.expanduser(req["path"]))
+    params_path = req.get("params") or None
+    note = ""
+    if os.path.basename(path) == "vst.json":
+        lay, par = port_config(path)
+        params_path = params_path or par
+        if not lay:
+            lay = os.path.join(os.path.dirname(path), "layout.conf")
+            note = 'vst.json has no "layout": add "layout": "layout.conf" to it so the build uses this file.'
+        path = lay
+        if not os.path.exists(path):
+            req["create"] = req.get("create") or ("auto" if params_path else "empty")
+    if req.get("create"):
+        if os.path.exists(path):
+            raise ValueError("%s already exists: open it instead" % path)
+        if not path.endswith(".conf"):
+            raise ValueError("a layout file name ends in .conf")
+        text = "[tab PAGE 1]\n"
+        if req["create"] == "auto":
+            params_path = params_path or find_params(path)
+            if not params_path:
+                raise ValueError("a layout from parameters needs a parameter file")
+            text = studio.auto_layout(*studio.load_params(params_path))
+        write_file(path, text)
+    elif not os.path.isfile(path):
+        raise ValueError("no such file: %s" % path)
+    st.open(path, params_path)
+    d = st.doc()
+    d["note"] = note
+    return d
+
+
+LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
+
+
+def handler(st, host, stop):
     class H(BaseHTTPRequestHandler):
         def log_message(self, fmt, *a):
             if "/api/" in (a[0] if a else ""):
@@ -302,7 +452,15 @@ def handler(st):
             self.end_headers()
             self.wfile.write(body)
 
+        def host_ok(self):
+            """Only requests addressed to this machine by name or loopback address (no DNS rebinding)."""
+            h = self.headers.get("Host") or ""
+            h = h[1:h.find("]")] if h.startswith("[") else h.split(":")[0]
+            return h in LOCAL_HOSTS or h == host
+
         def static(self, root, rel):
+            if not root:
+                return self.send(404, {"error": "no layout open"})
             path = os.path.realpath(os.path.join(root, unquote(rel)))
             if not (path.startswith(os.path.realpath(root) + os.sep) and os.path.isfile(path)):
                 return self.send(404, {"error": "not found"})
@@ -310,6 +468,8 @@ def handler(st):
                 self.send(200, f.read(), TYPES.get(os.path.splitext(path)[1].lower(), "application/octet-stream"))
 
         def do_GET(self):
+            if not self.host_ok():
+                return self.send(403, {"error": "bad Host"})
             u = urlparse(self.path)
             if u.path == "/api/doc":
                 return self.send(200, st.doc())
@@ -322,10 +482,23 @@ def handler(st):
 
         def do_POST(self):
             u = urlparse(self.path)
-            if self.headers.get("X-Studio") != "1":   # a custom header: another site's page can't send it here
+            # a custom header: another site's page can't send it without a CORS preflight, which this never answers
+            if self.headers.get("X-Studio") != "1" or not self.host_ok():
                 return self.send(403, {"error": "missing X-Studio header"})
             body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
             try:
+                req = json.loads(body or b"{}") if u.path != "/api/upload" else {}
+                if u.path == "/api/browse":
+                    return self.send(200, browse(req.get("dir")))
+                if u.path == "/api/open":
+                    return self.send(200, open_request(st, req))
+                if u.path == "/api/start":
+                    return self.send(200, st.start())
+                if u.path == "/api/quit":
+                    self.send(200, {"bye": True})
+                    return stop()
+                if not st.layout:
+                    return self.send(409, {"error": "no layout open"})
                 if u.path == "/api/upload":
                     name = os.path.basename(parse_qs(u.query).get("name", [""])[0])
                     path = st.local(name) if name and not name.startswith(".") else None
@@ -333,14 +506,12 @@ def handler(st):
                         return self.send(400, {"error": "fonts (.ttf .otf .woff .woff2), .svg and .css only"})
                     write_file(path, body)
                     return self.send(200, {"name": name})
-                req = json.loads(body or b"{}")
                 if u.path == "/api/render":
                     return self.send(200, render(req.get("head", []), req.get("widgets", []), st.by_key, st.dir))
                 if u.path == "/api/parse":
                     return self.send(200, {"w": shadow_skin.parse_widget(req["line"].strip())})
                 if u.path == "/api/save":
-                    text = dump_doc(req)
-                    write_file(st.layout, text)
+                    write_file(st.layout, dump_doc(req))
                     return self.send(200, {"saved": st.layout, "doc": st.doc()})
                 if u.path == "/api/file":
                     path = st.local(req.get("name", ""))
@@ -348,29 +519,54 @@ def handler(st):
                         return self.send(400, {"error": "only .css and .svg files next to the layout"})
                     write_file(path, req.get("text", ""))
                     return self.send(200, {"name": req["name"]})
-            except (ValueError, KeyError, IndexError) as e:
-                return self.send(400, {"error": "%s: %s" % (type(e).__name__, e)})
+            except (OSError, ValueError, KeyError, IndexError) as e:
+                return self.send(400, {"error": str(e) if isinstance(e, (OSError, ValueError)) else "%s: %s" % (type(e).__name__, e)})
+            except SystemExit as e:   # params.load() and friends report bad files this way
+                return self.send(400, {"error": str(e)})
             self.send(404, {"error": "not found"})
     return H
 
 
-def serve(layout, params_path=None, host="127.0.0.1", port=8765):
-    st = Studio(layout, params_path)
-    srv = ThreadingHTTPServer((host, port), handler(st))
-    print("skin studio: http://%s:%d/  (editing %s; Ctrl+C to stop)" % (host, srv.server_address[1], st.layout))
+def serve(layout=None, params_path=None, host="127.0.0.1", port=8765, open_browser=False):
+    """Serve the editor; without a layout (or given a port's vst.json) the page starts on its open screen.
+    A busy port moves on to the next free one."""
+    st = Studio()
+    if layout and os.path.basename(layout) == "vst.json":
+        open_request(st, {"path": layout, "params": params_path})
+    elif layout:
+        st.open(layout, params_path)
+    srv = None
+    for p in list(range(port, port + 20)) + [0]:
+        try:
+            srv = ThreadingHTTPServer((host, p), None)
+            break
+        except OSError:
+            continue
+    if srv is None:
+        raise SystemExit("studio: no free port")
+    srv.RequestHandlerClass = handler(st, host, lambda: threading.Thread(target=srv.shutdown, daemon=True).start())
+    url = "http://%s:%d/" % ("localhost" if host in ("127.0.0.1", "::1") else host, srv.server_address[1])
+    print("Skin Studio: %s" % url)
+    print("  %s" % ("editing " + st.layout if st.layout else "open a layout in the browser"))
+    print("  Keep this window open while you edit. To stop: Quit in the page, Ctrl+C, or close the window.")
+    sys.stdout.flush()
+    if open_browser:
+        threading.Timer(0.3, webbrowser.open, (url,)).start()
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
         pass
     srv.server_close()
+    print("Skin Studio stopped.")
 
 
 if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("layout")
+    ap.add_argument("layout", nargs="?", help="a layout.conf or a port's vst.json (default: choose in the browser)")
     ap.add_argument("--params")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--open", action="store_true", help="open the editor in the default browser")
     a = ap.parse_args()
-    serve(a.layout, a.params, a.host, a.port)
+    serve(a.layout, a.params, a.host, a.port, a.open)
