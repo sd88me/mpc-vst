@@ -12,6 +12,7 @@ vst.json (paths are relative to the vst.json's folder):
       "params": "params.json",                   # parameter list (tools/params.py), in VST index order
       "layout": "layout.conf",                   # optional; without it the skin studio's auto-layout is used
       "short_names": {"LFO1 > ": "L1 "},          # optional on-screen name shortening
+      "art": "html",                             # optional: draw the skin artwork in a browser (tools/html_art.py)
       "defines": {"HAS_LFO_BPM": 1},             # optional extra #defines in params.h
       "build": {"root": "..", "sources": ["src/engine.c"], "cflags": ["-Isrc"], "libs": ["-lm"]}
     }
@@ -133,6 +134,7 @@ def main():
                      ("LIBS", " ".join(b.get("libs", ["-lm"]))),
                      ("LAYOUT", "1" if cfg.get("layout") else ""),
                      ("TITLE_FONT", cfg.get("title_font", "")),
+                     ("ART", cfg.get("art", "")),
                      ("ADAPTER", adapter or "")):
             print("%s=%s" % (k, shlex.quote(v)))
         return
@@ -157,7 +159,8 @@ def main():
         print("no layout in vst.json: auto-layout written to", layout)
     import shutil
     shutil.rmtree(os.path.join(build, "skin"), ignore_errors=True)   # no stale images from older builds
-    art = os.environ.get("SHADOW_ART", os.path.join(build, "shadow_art"))
+    art = os.environ.get("SHADOW_ART") or (os.path.join(TOOLS, "html_art.py") if cfg.get("art") == "html"
+                                           else os.path.join(build, "shadow_art"))
     print("skin:", shadow_skin.write_skin(os.path.join(build, "skin"), cfg["vendor"], cfg["name"], layout, plist, art))
 
 

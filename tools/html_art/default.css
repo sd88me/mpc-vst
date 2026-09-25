@@ -1,0 +1,82 @@
+/* Default look for the browser-rendered skin artwork (tools/html_art.py). A port restyles it with its own
+ * stylesheet (layout top-level `art_css=skin.css`), loaded after this one: override the variables, any class
+ * below, or add @font-face rules. Geometry (where each thing is, how big) comes from the layout and must not
+ * change, since MPC places its live controls on top of these images; colours, fonts, shapes inside a widget's
+ * box, gradients and shadows are all yours.
+ *
+ * Variables come from the layout's theme_* lines (theme_accent=c1552f -> --accent), so a theme written for the
+ * Force Shadow renderer carries over. Colours passed per drawing (a segment's on/off fill, a button's color=)
+ * arrive as --fill / --ink / --border on that element. */
+
+@font-face { font-family: "Titillium Web"; font-weight: 400; src: url("fonts/TitilliumWeb-Regular.ttf"); }
+@font-face { font-family: "Titillium Web"; font-weight: 600; src: url("fonts/TitilliumWeb-SemiBold.ttf"); }
+@font-face { font-family: "Titillium Web"; font-weight: 700; src: url("fonts/TitilliumWeb-Bold.ttf"); }
+
+:root {
+  --font: "Titillium Web", "DejaVu Sans", sans-serif;   /* MPC's own live-text font, so baked and live text match */
+  --title-font: var(--font);
+  --title-size: 20px;
+  --label-size: 15px;
+  --seg-size: 14px;
+  --button-size: 15px;
+  --radius: 6px;
+  --sheen: 0.10;          /* white highlight over buttons, segments and knob faces (0 = flat) */
+  --shadow: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.55));
+}
+
+text { font-family: var(--font); font-weight: 600; }
+
+/* frames */
+.frame-border { fill: none; stroke: var(--line); stroke-width: 1.5; }
+.frame-rule { stroke: var(--line); stroke-width: 1; }
+.frame-title { font-family: var(--title-font); font-size: var(--title-size); font-weight: 700; fill: var(--accent-hi);
+               letter-spacing: 0.06em; }
+.td3 .frame-border { fill: var(--box); stroke: var(--line); stroke-width: 2; }
+.td3 .frame-title { fill: var(--accent); }
+
+/* free text (enum group labels) */
+.text { font-size: var(--label-size); letter-spacing: 0.04em; }
+
+/* knobs: 270 degrees of travel, value arc from the start to the pointer */
+.knob-track { fill: none; stroke: var(--knob-ring); stroke-linecap: round; }
+.knob-arc { fill: none; stroke: var(--knob-dot); stroke-linecap: round; }
+.knob-face { fill: var(--knob-face); filter: var(--shadow); }
+.knob-sheen { fill: url(#sheen-radial); }
+.knob-pointer { stroke: var(--knob-dot); stroke-linecap: round; }
+
+/* toggles */
+.pill-track { fill: #050403; stroke: var(--line); stroke-width: 1.5; }
+.pill-thumb { fill: #4c473d; filter: var(--shadow); }
+.on .pill-thumb { fill: var(--accent-hi); }
+
+/* trigger buttons */
+.button-bg { fill: var(--fill); filter: var(--shadow); rx: var(--radius); }
+.button-sheen { fill: url(#sheen-linear); rx: var(--radius); }
+.button-tx { font-size: var(--button-size); fill: var(--btn-text-plain); letter-spacing: 0.08em; }
+.td3 .button-tx { fill: var(--btn-text); }
+
+/* option segments and popup options */
+.seg-bg { fill: var(--fill); }
+.seg-sheen { fill: url(#sheen-linear); }
+.seg-tx { font-size: var(--seg-size); fill: var(--ink); letter-spacing: 0.05em; }
+
+/* text boxes (readout, stepper, menu, popup field) */
+.box-label { font-size: var(--label-size); fill: var(--ink-dim); letter-spacing: 0.08em; }
+.box { fill: var(--lcd); stroke: var(--line); stroke-width: 1; }
+.arrow-bg { fill: var(--line); }
+.arrow { fill: var(--accent-hi); }
+
+/* dot-matrix LCD (style=dotmatrix readouts/steppers) */
+.dot-bezel { fill: var(--display-bezel); }
+.dot-cell { fill: var(--display-cell); }
+.dot-arrow { fill: var(--display-bg); }
+
+/* list tiles and popup panels */
+.tile { fill: var(--fill); }
+.tile-border { fill: none; stroke: var(--border); }
+.tile-rule { fill: var(--line); }
+
+/* sliders */
+.slider-well { fill: #050403; }
+.slider-fill { fill: var(--knob-dot); }
+.slider-thumb { fill: var(--knob-face); stroke: var(--knob-ring); stroke-width: 2; filter: var(--shadow); }

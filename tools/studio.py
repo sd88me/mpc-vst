@@ -20,8 +20,9 @@ SVG conventions (what to-svg writes and from-svg reads), all in plugin pixels (1
     coordinates, e.g. `knob key=cutoff label="CUTOFF"`, `frame title="FILTER"`,
     `list key=result cols=2 rows=4 gap=4`; the geometry comes from its first circle/rect
   - knobs: a circle (centre + radius); everything else: a rect (centre and/or size, by kind)
-  - anything without such a label (drawings, text, images) is ignored for now; later it becomes
-    background artwork
+  - anything without such a label (drawings, text, images) is background artwork: from-svg writes each
+    tab's to `<layout>.<tab>.art.svg` and adds an `art file=...` line (drawn by the browser renderer,
+    vst.json "art": "html"); a group labelled `art when=<param>:<option>` becomes art for that mode only
 Moving, resizing and duplicating elements in Inkscape is all you need; transforms are handled.
 """
 import argparse
@@ -237,8 +238,18 @@ STYLE = {"frame": "fill:none;stroke:#8f8a78;stroke-width:2",
          "default": "fill:#c7c2b0;fill-opacity:0.6;stroke:#2f4a6b;stroke-width:2"}
 
 
+SKIP_TAGS = ("desc", "title", "metadata", "namedview", "defs")
+
+
+def art_children(path):
+    """An art file's drawing elements (for to-svg to put back into the layer)."""
+    root = ET.parse(path).getroot()
+    return [ch for ch in root if ch.tag.split("}")[-1] not in ("metadata", "namedview", "title", "desc")]
+
+
 def to_svg(conf_path, params_path=None):
     tabs, top = shadow_skin.parse_layout(conf_path)
+    conf_dir = os.path.dirname(os.path.abspath(conf_path))
     opts = {}
     if params_path:
         for p in load_params(params_path)[0]:
@@ -256,6 +267,11 @@ def to_svg(conf_path, params_path=None):
         ET.SubElement(layer, "{%s}desc" % SVG_NS).text = "\n".join(
             'qlinks "%s" = %s' % (n, ",".join(ks)) for n, ks in tab["qlinks"])
         for i, w in enumerate(tab["widgets"]):
+            if w["kind"] == "art":   # the drawing itself, editable; the group's label keeps any when=
+                rest = {k: v for k, v in w.items() if k != "file"}
+                g = ET.SubElement(layer, "{%s}g" % SVG_NS, {LABEL: conf_line(rest), "id": "t%dw%d" % (t, i)})
+                g.extend(art_children(os.path.join(conf_dir, w["file"])))
+                continue
             if w["kind"].startswith("enum") and not w.get("options") and w.get("key") in opts:
                 w["options"] = opts[w["key"]]
             tag, attrs = shape_for(w)
@@ -375,9 +391,29 @@ def element_to_line(label, geo):
     return conf_line(w)
 
 
-def from_svg(svg_path):
+def matrix_attr(m):
+    return "matrix(%s)" % " ".join("%g" % v for v in m)
+
+
+def write_art(path, defs, parts):
+    """parts: [(matrix, [elements])] -> a standalone 1280x628 SVG drawn by `art file=`."""
+    root = ET.Element("{%s}svg" % SVG_NS, {"width": str(W), "height": str(H), "viewBox": "0 0 %d %d" % (W, H)})
+    if len(defs):
+        root.append(defs)
+    for m, els in parts:
+        g = ET.SubElement(root, "{%s}g" % SVG_NS, {"transform": matrix_attr(m)})
+        g.extend(els)
+    ET.ElementTree(root).write(path, encoding="unicode", xml_declaration=False)
+
+
+def from_svg(svg_path, out_path=None):
     root = ET.parse(svg_path).getroot()
     out = ["# from %s via studio.py from-svg" % os.path.basename(svg_path)]
+    out_dir = os.path.dirname(os.path.abspath(out_path or svg_path))
+    stem = os.path.splitext(os.path.basename(out_path or svg_path))[0]
+    defs = ET.Element("{%s}defs" % SVG_NS)   # gradients, patterns, ... wherever Inkscape put them
+    for d in root.iter("{%s}defs" % SVG_NS):
+        defs.extend(list(d))
     desc = root.find("{%s}desc" % SVG_NS)
     if desc is not None and desc.text:
         out += [l.strip() for l in desc.text.splitlines() if l.strip()]
@@ -388,18 +424,32 @@ def from_svg(svg_path):
             continue
         out += ["", "[%s]" % lab]
         lm = mul(base, parse_transform(layer.get("transform")))
+        tab_slug = re.sub("_+", "_", shadow_skin.slug(lab[4:]).lower())
+        lines, loose, groups = [], [], []
 
         def walk(el, m):
             for ch in el:
                 cm = mul(m, parse_transform(ch.get("transform")))
                 l = ch.get(LABEL, "")
-                if l.split(" ")[0] in shadow_skin.CONTROL_KINDS + ("frame",):
+                kind = l.split(" ")[0]
+                if kind in shadow_skin.CONTROL_KINDS + ("frame",):
                     geo = geometry(ch, cm)
                     if geo:
-                        out.append(element_to_line(l, geo))
-                elif ch.tag.endswith("}g"):
+                        lines.append(element_to_line(l, geo))
+                elif kind == "art":
+                    groups.append((l, cm, list(ch)))
+                elif ch.tag.endswith("}g") and not l:
                     walk(ch, cm)
+                elif ch.tag.split("}")[-1] not in SKIP_TAGS:
+                    loose.append((m, ch))   # a drawing: background artwork
         walk(layer, lm)
+        arts = [("art", [(m, [e]) for m, e in loose])] if loose else []
+        arts += [(l, [(m, els)]) for l, m, els in groups]
+        for n, (l, parts) in enumerate(arts):
+            name = "%s.%s.art%s.svg" % (stem, tab_slug, n or "")
+            write_art(os.path.join(out_dir, name), defs, parts)
+            out.append(conf_line({"kind": "art", "file": name, **dict(t.split("=", 1) for t in shlex.split(l)[1:] if "=" in t)}))
+        out += lines
         d = layer.find("{%s}desc" % SVG_NS)
         if d is not None and d.text:
             out += [l.strip() for l in d.text.splitlines() if l.strip().startswith("qlinks")]
@@ -451,13 +501,15 @@ def preview(skin_dir, out_pattern, frame=40):
             cd = c["componentData"]
             x, y, w, h = xywh(c["bounds"])
             if cd["type"] == "Image":
-                im.paste(Image.open(os.path.join(skin_dir, cd["data"]["image"])).convert("RGB"), (x, y))
+                img = Image.open(os.path.join(skin_dir, cd["data"]["image"])).convert("RGBA")
+                im.paste(img, (x, y), img)
                 continue
             for s in defs[cd["type"]]["componentsData"]:
                 sd = s["componentData"]
                 sx, sy, sw, sh = xywh(s["bounds"])
                 if sd["type"] == "Image":
-                    im.paste(Image.open(os.path.join(skin_dir, sd["data"]["image"])).convert("RGB"), (x + sx, y + sy))
+                    img = Image.open(os.path.join(skin_dir, sd["data"]["image"])).convert("RGBA")
+                    im.paste(img, (x + sx, y + sy), img)
                 elif sd["type"] == "Knob":
                     st = Image.open(os.path.join(skin_dir, sd["data"]["filmStrip"])).convert("RGBA")
                     fw = st.size[0]
@@ -466,7 +518,8 @@ def preview(skin_dir, out_pattern, frame=40):
                 elif sd["type"] == "Button":
                     img = sd["data"]["offImage"]
                     if img:
-                        im.paste(Image.open(os.path.join(skin_dir, img)).convert("RGB"), (x + sx, y + sy))
+                        img = Image.open(os.path.join(skin_dir, img)).convert("RGBA")
+                        im.paste(img, (x + sx, y + sy), img)
                 elif sd["type"] == "Label":
                     # "Name" labels show the real, device-rendered Titillium Web text on MPC
                     # (proportional, not shadow_art.c's baked bitmap font); approximate with
@@ -510,7 +563,7 @@ def main():
     elif args.cmd == "to-svg":
         open(args.o, "w").write(to_svg(args.conf, args.params))
     elif args.cmd == "from-svg":
-        open(args.o, "w").write(from_svg(args.svg))
+        open(args.o, "w").write(from_svg(args.svg, args.o))
     else:
         for out, name in preview(args.skin, args.o):
             print(out, name)

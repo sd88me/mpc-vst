@@ -17,7 +17,7 @@ params ──auto──► layout.conf ──to-svg──► layout.svg ──(I
 | Preview | `tools/studio.py preview "<skin>/Plugin Skins" -o page_%d.png` | Before deploying anything (a page with popups also gets `page_N_open.png`, and one with mode panels a `page_N_mode<p>-<i>.png` per other option) |
 
 The tools need Python 3; the skin build and preview also need Pillow (the ports run them in a
-`python:3.11-slim` container).
+`python:3.11-slim` container). The browser renderer (below) runs in its own image, `mpc-vst-html-art`.
 
 ## Auto-layout
 - Input: the port's parameter file (`tools/params.py`; its `sections` become frames), or an adapter's
@@ -43,10 +43,29 @@ The tools need Python 3; the skin build and preview also need Pillow (the ports 
   width ÷ options per row. Toggles, buttons and vertical selectors use only the centre (their size
   is fixed by the renderer).
 - Q-Link sets live in the layer's **description** (`qlinks "PAGE" = key,...`, one line per nested page).
-- Anything without a control label (your own drawings, text, logos) is ignored for now. Using it as
-  background artwork is the next step (browser-rendered art, see below).
+- Anything without a control label (your own drawings, gradients, text, logos) is **background artwork**:
+  `from-svg` writes each tab's to `<layout>.<tab>.art.svg` next to the layout and adds an `art file=...` line,
+  and `to-svg` puts it back as editable shapes. Put a drawing in a group labelled `art when=<param>:<option>`
+  to show it only in that mode. Art needs the browser renderer.
 - `to-svg` → `from-svg` without edits reproduces the layout exactly (verified on Maze Voice: identical
   `TUI.json`, Q-Links and every image).
+
+## Artwork renderers
+The layout says where everything goes; a renderer draws it. Two do, from the same layout:
+
+- **shadow_art** (default): force-shadow's own renderer (vendored), so a skin matches the Force Shadow page it
+  was ported from pixel for pixel. Bitmap font; controls are opaque squares on the plate colour.
+- **Browser** (`"art": "html"` in vst.json): `tools/html_art.py` draws each piece as SVG in headless Chromium
+  (`tools/html_art/`, built into the `mpc-vst-html-art` Docker image by `tools/build_port.sh`). Text is real
+  Titillium Web by default (MPC's own live-text font, so baked and live text match), knobs have a value arc,
+  controls have transparent edges so they sit on artwork, and `art file=` drawings go into the background.
+  Restyle it with a stylesheet: a top-level `art_css=skin.css` line in the layout, loaded after
+  `tools/html_art/default.css` (its header lists the classes and variables). Any font (`@font-face` with a
+  file next to the CSS), knob look, gradient or shadow; `theme_*` lines still set the colours. Only colours,
+  shapes and effects change: sizes and positions stay the layout's, because MPC puts its live controls there.
+
+A port with its own build script runs `gen_vst.py` inside `mpc-vst-html-art` instead of `python:3.11-slim`
+(see `tools/build_port.sh`).
 
 ## Mode panels
 End any layout line (a frame too) with `when=<param>:<option>` to show it only while that option parameter is at

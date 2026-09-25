@@ -23,13 +23,15 @@ Layout file:
                                                         Needs the hidden "<param>__open" param: popup_params())
     stepper cx= cy= w= h= label="..." key=<param>      (live text; arrows = <param>_prev / <param>_next)
     list    x= y= w= h= cols= rows= th= gap= key=<p>   (rows = params <p>_1..<p>_N: text + tap)
+    art     file="drawing.svg"                         (an SVG drawing, e.g. from studio.py from-svg, drawn into the
+                                                        page background at plugin size 1280x628; browser renderer only)
     qlinks  "PAGE NAME" = key,key,...                  (optional, repeatable)
 Any widget line (frames too) can end in `when=<param>:<option>` (option name or index): it is shown only
 while that option parameter is at that option (MPC's IndexedEnabling), so a tab can swap control sets per
 mode. Its baked parts (frame, title, text boxes, group labels) go into a per-mode image over the background.
 Top level: `qlinks_track = key,...` sets the Q-Links used outside page-follow mode (default: page 1's).
 Top-level `style=` / `theme_<name>=RRGGBB` lines are the shadow_page.conf ones; `color=` on a
-button overrides its fill.
+button overrides its fill. `art_css=skin.css` restyles the browser renderer's artwork (tools/html_art.py).
 
 Coordinates are Force Shadow landscape pixels (1280x800); the plugin area is
 1280x628, taken from y=Y_OFF. Each `qlinks` line makes one MPC sub-page of
@@ -261,11 +263,13 @@ def button_rect(w):
     return (w["cx"] - bw // 2, w["cy"] - bh // 2, bw, bh)
 
 
-def baked_cmds(w, title_font=None):
+def baked_cmds(w, title_font=None, base_dir="."):
     """shadow_art commands for the parts of w baked into the page background (frames, text boxes,
-    list tiles, group labels); the controls themselves are separate images/components."""
+    list tiles, group labels, SVG art); the controls themselves are separate images/components."""
     cmds = []
-    if w["kind"] == "frame":
+    if w["kind"] == "art":
+        cmds.append("svg|%s|0|%d|%d|%d" % (os.path.abspath(os.path.join(base_dir, w["file"])), Y_OFF, W, H))
+    elif w["kind"] == "frame":
         if title_font and w.get("title"):   # the title is drawn with the real font afterwards
             cmds.append("frameblank|%d|%d|%d|%d" % (w["x"], w["y"], w["w"], w["h"]))
         else:
@@ -284,6 +288,8 @@ def baked_cmds(w, title_font=None):
 def baked_rect(w):
     """Area (shadow coords) that baked_cmds(w) draws into, generously; None if it draws nothing."""
     k = w["kind"]
+    if k == "art":
+        return (0, Y_OFF, W, H)
     if k == "frame":
         return (w["x"] - 2, w["y"] - 2, w["w"] + 4, w["h"] + 4)
     if k in ("readout", "stepper", "menu", "popup"):
@@ -395,8 +401,13 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
         if oi is None:
             raise SystemExit("layout: when=%s: %r is not one of %s" % (w["when"], o, ",".join(opts)))
         return "IndexedEnabling/%d/%d/Parameter %d" % (oi, len(opts), index[k])
+    base_dir = os.path.dirname(os.path.abspath(layout_path))
+    if any(w["kind"] == "art" for tab in tabs_in for w in tab["widgets"]) and not os.path.basename(art_bin).startswith("html_art"):
+        raise SystemExit("layout: `art` lines need the browser renderer (vst.json \"art\": \"html\")")
     theme_conf = os.path.join(work, "theme.conf")
-    open(theme_conf, "w").write("\n".join(l for l in top if not l.startswith("qlinks_track")) + "\n")
+    open(theme_conf, "w").write("\n".join(   # art_css= is relative to the layout; the renderer runs elsewhere
+        "art_css=" + os.path.join(base_dir, l[8:].strip()) if l.startswith("art_css=") else l
+        for l in top if not l.startswith("qlinks_track")) + "\n")
     script.append("theme|" + theme_conf)
 
     def art(name):
@@ -450,7 +461,7 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
         base = [w for w in tab["widgets"] if not cond(w)]
         script.append("clear|" + PLATE)
         for w in base:
-            script += baked_cmds(w, TITLE_FONT)
+            script += baked_cmds(w, TITLE_FONT, base_dir)
         script.append("crop|%s|0|%d|%d|%d" % (art(bg), Y_OFF, W, H))
         decor.append((bg, 0, Y_OFF, base))
         kids.append(_sub("Image", {"version": 2, "imageType": "Regular", "colour": "0", "image": bg + ".png"},
@@ -470,7 +481,7 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
             img = "sh_mode_%d_%d" % (t, m_i)
             script.append("clear|" + PLATE)
             for w in base + ws:
-                script += baked_cmds(w, TITLE_FONT)
+                script += baked_cmds(w, TITLE_FONT, base_dir)
             script.append("crop|%s|%d|%d|%d|%d" % (art(img), bx, by, bw, bh))
             decor.append((img, bx, by, base + ws))
             c = _sub("Image", {"version": 2, "imageType": "Regular", "colour": "0", "image": img + ".png"},

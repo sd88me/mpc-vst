@@ -13,9 +13,14 @@ ADAPTER_SRC=""
 U="$(id -u):$(id -g)"
 mkdir -p "$ROOT/$PORT/build"
 
-# 1. skin artwork renderer (host binary)
-docker run --rm -u "$U" -v "$ROOT":/w -v "$MV":/mv:ro -w /w gcc:12 \
-  gcc -O2 -I/mv/tools/vendor/force-shadow/tools -o "$PORT/build/shadow_art" /mv/tools/shadow_art.c -lm
+# 1. skin artwork renderer: shadow_art (host binary), or with vst.json "art": "html" a browser
+# (tools/html_art.py in the mpc-vst-html-art image: headless Chromium + Pillow)
+if [ "$ART" = html ]; then
+  docker build -q -t mpc-vst-html-art "$MV/tools/html_art" >/dev/null
+else
+  docker run --rm -u "$U" -v "$ROOT":/w -v "$MV":/mv:ro -w /w gcc:12 \
+    gcc -O2 -I/mv/tools/vendor/force-shadow/tools -o "$PORT/build/shadow_art" /mv/tools/shadow_art.c -lm
+fi
 
 # 2. params.h, skin, plugin-list entry
 # TITLE_FONT (vst.json's optional "title_font", a .ttf/.otf path relative to vst.json): a real
@@ -28,8 +33,13 @@ if [ -n "$TITLE_FONT" ]; then
   FONT_MOUNT=(-v "$ROOT/$PORT/$TITLE_FONT:/w/$PORT/$TITLE_FONT:ro")
   FONT_ENV=(-e "SHADOW_TITLE_FONT=/w/$PORT/$TITLE_FONT")
 fi
-docker run --rm -u "$U" -v "$ROOT":/w -v "$MV":/mv:ro "${FONT_MOUNT[@]}" "${FONT_ENV[@]}" -w /w python:3.11-slim sh -c \
-  "pip install -q --no-warn-script-location --target /tmp/p pillow >/dev/null 2>&1; PYTHONPATH=/tmp/p python3 /mv/tools/gen_vst.py '$PORT/vst.json'"
+if [ "$ART" = html ]; then
+  docker run --rm -u "$U" -e HOME=/tmp -v "$ROOT":/w -v "$MV":/mv:ro "${FONT_MOUNT[@]}" "${FONT_ENV[@]}" -w /w mpc-vst-html-art \
+    python3 /mv/tools/gen_vst.py "$PORT/vst.json"
+else
+  docker run --rm -u "$U" -v "$ROOT":/w -v "$MV":/mv:ro "${FONT_MOUNT[@]}" "${FONT_ENV[@]}" -w /w python:3.11-slim sh -c \
+    "pip install -q --no-warn-script-location --target /tmp/p pillow >/dev/null 2>&1; PYTHONPATH=/tmp/p python3 /mv/tools/gen_vst.py '$PORT/vst.json'"
+fi
 
 # 3. the plugin (armhf, glibc 2.36 so it loads on the device's 2.39)
 # All-C sources (every port so far): unchanged single gcc command (byte-identical Maze builds).

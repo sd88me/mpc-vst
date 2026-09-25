@@ -422,6 +422,14 @@ are drawn into a per-mode image, the page background redrawn with that mode's pa
 over the base background (which leaves them out). A popup's list itself isn't tagged, so a list left open
 while the mode changes stays open until a pick.
 
+## Browser-rendered artwork (built 2026-09-25, offline only; not yet seen on a device)
+`tools/html_art.py` takes shadow_art.c's stdin commands and draws them as SVG in headless Chromium (Playwright
+1.47, `tools/html_art/Dockerfile`), so the layout and skin builder are unchanged. Maze Voice's whole skin renders
+in about 7 s. Differences that matter on a device: knob/slider filmstrips and the images of toggles, buttons and
+option segments are **RGBA** (transparent edges, so they sit on art); stock skins' filmstrips are PNGs with
+alpha, but that MPC honours alpha in a `Button`'s on/off images is untested. Backgrounds, mode images and popup
+panels stay opaque. `art file=` (SVG art) is only drawn by this renderer; shadow_skin refuses it otherwise.
+
 ## Patching MPC's own picker: not practical (checked 2026-09-25)
 `/usr/bin/MPC` links JUCE statically and is stripped (no `.symtab`); of ~8000 exported dynamic symbols none
 names a menu/overlay/combo/parameter class (only ~92 JUCE-related, all typeinfo/vtables of unrelated

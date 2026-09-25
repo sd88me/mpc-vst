@@ -58,6 +58,8 @@ Stop any separately attached audio engines first.
 - Conditional visibility: `bounds.additionalInvalidatingHandles: ["IndexedEnabling/<i>/<N>/Parameter <p>"]` shows a
   component only while param p (as an N-way choice) is at index i. Works for VST2 params; basis of `popup` and
   of layout `when=<param>:<option>` (mode panels: a line shown only in that mode; SKIN_STUDIO "Mode panels").
+- Two artwork renderers, same layout: shadow_art (default, matches Force Shadow) or the browser (`"art": "html"`,
+  tools/html_art.py; `art_css=` restyles, `art file=` adds Inkscape drawings; SKIN_STUDIO "Artwork renderers").
 - Live text fonts: only `Titillium Web` and `Roboto` (any weight/size) resolve; anything else falls back to
   Titillium. Other typefaces must be baked into PNGs.
 - Off/on: one `Button` + "Enter Pressed → Toggle Switch". Triggers (`momentary`): the wrapper sends
