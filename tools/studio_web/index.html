@@ -36,8 +36,10 @@
     <section>
       <h2>Add</h2>
       <div id="palette" class="ui-palette"></div>
-      <button id="import-art" class="ui-wide" title="Upload an SVG drawing next to the layout and add it as this tab's background art">Import SVG art…</button>
-      <input type="file" id="art-file" accept=".svg,image/svg+xml" hidden>
+      <div class="ui-row" style="margin-top:0">
+        <button id="import-art" title="Upload an image or SVG drawing and put it behind this tab (fills the plugin area)">Background…</button>
+        <button id="place-img" title="Upload an image and place it on the page (a logo, a panel photo)">Place image…</button>
+      </div>
     </section>
     <section class="ui-grow">
       <h2>Layers <span class="ui-hint">file order; frames and art draw behind controls</span></h2>
@@ -72,12 +74,14 @@
       <button data-p="qlinks">Q-Links</button>
       <button data-p="theme">Theme</button>
       <button data-p="css">Style</button>
+      <button data-p="assets">Assets</button>
       <button data-p="checks">Checks <span id="check-count" class="ui-badge" hidden></span></button>
     </nav>
     <div class="ui-panel" id="p-inspect"></div>
     <div class="ui-panel" id="p-qlinks" hidden></div>
     <div class="ui-panel" id="p-theme" hidden></div>
     <div class="ui-panel" id="p-css" hidden></div>
+    <div class="ui-panel" id="p-assets" hidden></div>
     <div class="ui-panel" id="p-checks" hidden></div>
   </aside>
 </main>

@@ -73,7 +73,8 @@ as `layout.conf` and `params.json` and open it.
 - **Style:** creates or edits the `art_css=` stylesheet with a live preview: sliders for the renderer's text sizes,
   corner radius and sheen, font upload (`@font-face` added for you) and a font picker for labels and frame titles.
   Fonts only change baked text; MPC draws names and values in its own fonts (docs/NOTES.md).
-- **Import SVG art:** uploads a drawing and adds an `art file=` line (drawn by the browser renderer).
+- **Looks** (inspector) and **Assets** (tab): see "Looks and images" below. **Background…** puts an image or SVG
+  drawing behind the tab; **Place image…** puts one on the page at its own shape (a logo, a panel photo).
 - **Checks:** unknown parameters, option counts that differ from the parameter, bad `when=`, controls overlapping or
   past the plugin area's edge, broken lines, Q-Link sets over 16. Click one to select the widget.
 - **Saving** (Ctrl+S) writes the layout as `layout.conf.new`, then renames it over the old one; the first save keeps the
@@ -83,6 +84,45 @@ as `layout.conf` and `params.json` and open it.
 The server listens on 127.0.0.1 only (`--host` to change it) and answers only requests addressed to this machine.
 It reads and writes files only in the open layout's folder; the start screen can list any folder and open or create
 a layout there.
+
+## Looks and images
+Controls can be drawn by the renderer (the default), with a built-in look, or from your own images. Every route
+needs the browser renderer (`"art": "html"` in vst.json); the builder refuses them otherwise. Paths are relative to
+the layout; the editor uploads into `images/` next to it. Keep images inside the port's folder: `build_port.sh` runs
+the build in Docker with only that folder (and this repo) mounted. Images: `.png .jpg .jpeg .webp .gif .svg`
+(`tools/skin_assets.py` has the details).
+
+| Asset | Layout | Notes |
+|---|---|---|
+| Knob, built-in | `knob ... look=moog` | `moog`, `chicken`, `metal`, `cap` (the theme's knob colours) |
+| Knob image | `knob ... img=knob.png [base=scale.png]` | turned through 270°; draw it pointing up (= the middle of the travel); `base` stays still under it |
+| Knob filmstrip | `knob ... strip=knob_strip.png [frames=N]` | frames stacked down (or across), minimum first; resampled to MPC's 128 |
+| Slider | `slider_v ... look=fader`, or `img=thumb.png [base=track.png]`, or `strip=` | the thumb is as wide as a vertical slider; the track is stretched to it |
+| Toggle / switch | `toggle ... look=led` (or `switch`), or `img=off.png [img_on=on.png] [w= h=]` | sized from the image (or `w`/`h`); without `img_on`, on = the off image brightened |
+| Button, key, pad | `button ... img=pad.png [img_on=pad_lit.png] [w= h=]` | the label is drawn on top; `label=""` for none |
+| Option segments | `enum_h` / `enum_v ... img=seg.png [img_on=seg_lit.png]` | each option: the image, its name on top |
+| Panel | `frame ... img=panel.png` | the picture (stretched) instead of the drawn border; the title on top |
+| Pop-out list | `popup ... img=list.png` | the open list's panel, under the options |
+| Page background | `art file=bg.jpg [fit=cover]` | fills the plugin area (`fit`: contain, cover, stretch) |
+| Placed image, logo | `art file=logo.png x= y= w= h=` | anywhere, at any size; ends up baked into the background |
+| Value pictures | `picture x= y= w= h= key=<param> files="a.png,b.png,.."` | one image per option of the parameter, the current one shown (MPC switches them: mode images) |
+| Meter | `meter cx= cy= w= h= key=<param> strip=meter.png` | experimental: a display-only filmstrip. The engine must set the parameter; whether MPC redraws it live is still to be checked on a device |
+
+**Defaults for a whole kind:** a top-level `<group>_<attr>=` line, e.g. `knob_look=moog`, `slider_img=images/cap.png`,
+`seg_img=images/seg.png` (groups `knob`, `slider`, `toggle`, `button`, `seg`, `frame`, `popup`, `meter`). A line that
+sets any look attribute ignores the defaults; `look=drawn` keeps the renderer's drawing. In the editor: set a control's
+look, then **Use for every …**; the Theme panel lists the defaults.
+
+**In the editor:** the inspector's **Look** section picks the look and each image (with upload), and a filmstrip's
+frame count (shown as "auto: N" when the image's shape gives it). The **Assets** tab shows the images next to the
+layout; pick one, then what it's for (the selected control's image, filmstrip, base, on image, a picture's next
+option, placed on the page, or the page background).
+
+**Built-in looks** draw with `look-*` classes (`tools/html_art/default.css`), so a stylesheet can recolour them. An
+image segment's name uses the theme's `ink` (off) and `seg_active_tx` (selected); restyle `.seg.look-image .seg-tx`.
+
+**Images from other skins:** stock MPC skin art is Akai's. Never commit it to this repo (it keeps a reference copy
+in the git-ignored `Assets/`); a port whose skin uses it ships it in its release zip, which is the port owner's call.
 
 ## Inkscape (or Penpot) round trip
 - Open `layout.svg` in Inkscape. Each tab is a **layer** (`tab <NAME>`); only the first is visible,
@@ -95,6 +135,8 @@ a layout there.
   width ÷ options per row. Toggles, buttons and vertical selectors use only the centre (their size
   is fixed by the renderer).
 - Q-Link sets live in the layer's **description** (`qlinks "PAGE" = key,...`, one line per nested page).
+- Placed and bitmap images (`art file=... x= y= w= h=`, `picture`) come across as linked images in a labelled group:
+  move or resize the image.
 - Anything without a control label (your own drawings, gradients, text, logos) is **background artwork**:
   `from-svg` writes each tab's to `<layout>.<tab>.art.svg` next to the layout and adds an `art file=...` line,
   and `to-svg` puts it back as editable shapes. Put a drawing in a group labelled `art when=<param>:<option>`

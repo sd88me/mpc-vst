@@ -155,3 +155,17 @@ h3 { font-size: 12px; margin: 14px 0 6px; font-weight: 600; }
 .ui-newrow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .ui-newrow input { width: 180px; }
 .ui-bye { max-width: 520px; margin: 80px auto; text-align: center; color: var(--ui-dim); }
+
+/* images: pickers and the Assets panel */
+.ui-pick { display: flex; gap: 4px; align-items: center; }
+.ui-pick select { flex: 1; min-width: 0; }
+.ui-thumb { width: 28px; height: 28px; object-fit: contain; background: #0c0c0e; border: 1px solid var(--ui-line); border-radius: 3px; flex: none; }
+.ui-assets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 10px 0; }
+.ui-asset { border: 1px solid var(--ui-line); border-radius: 6px; padding: 4px; cursor: pointer; background: #151518; min-width: 0; }
+.ui-asset:hover { border-color: var(--ui-dim); }
+.ui-asset.ui-on { border-color: var(--ui-sel); box-shadow: 0 0 0 1px var(--ui-sel) inset; }
+.ui-asset-img { height: 64px; display: flex; align-items: center; justify-content: center;
+                background: repeating-conic-gradient(#222 0% 25%, #1a1a1a 0% 50%) 0 0 / 12px 12px; border-radius: 4px; overflow: hidden; }
+.ui-asset-img img { max-width: 100%; max-height: 64px; object-fit: contain; }
+.ui-asset-name { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 3px; }
+.ui-asset small { color: var(--ui-dim); font-size: 10px; }

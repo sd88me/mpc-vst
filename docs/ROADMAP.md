@@ -10,8 +10,13 @@ Building on parameter-driven visibility (`IndexedEnabling`, NOTES "Conditional v
       names and values (the only two families MPC resolves).
 - [ ] **Build and preview from the browser editor.** A button in `studio.py serve` that builds the port's skin and
       shows `studio.py preview`'s pages (needs the port's vst.json and the renderer's Docker image).
-- [ ] **Images that follow a value.** A per-option image set (e.g. a waveform picture per wave type) shown by
-      `IndexedEnabling` on the parameter.
+- [ ] **Looks and images on a device.** Built and previewed offline (2026-09-25): check a skin with image knobs,
+      an imported filmstrip, image toggles/buttons/segments, a panel picture, a popup list picture and a `picture`
+      (one image per option) on a Force.
+- [ ] **Meters.** The `meter` widget (a display-only filmstrip) is built; check on a device whether MPC redraws a
+      FilmStrip when the engine changes the parameter by itself, and at what rate, with an engine that sets one.
+- [ ] **Tab images.** MPC draws the function-key tab bar; find how stock skins give tabs on/off images (from a
+      stock TUI.json, described in NOTES, not committed) and whether a plugin skin can.
 
 ## Porting and tooling
 - [ ] **A reference port on `engine.h` + `params.json`** (e.g. `poc/synth.c` turned into a full example), so
@@ -22,6 +27,11 @@ Building on parameter-driven visibility (`IndexedEnabling`, NOTES "Conditional v
       and `tools/probe_device.sh` after firmware updates. Needs the hardware.
 
 ## Done
+- [x] Control looks and images, offline (2026-09-25): built-in looks (knobs moog/chicken/metal/cap, slider fader,
+      toggles led/switch), turning knob images with a still base, filmstrip import (knobs, sliders, meters), slider
+      thumb/track, on/off images for toggles, buttons and segments, frame and popup panel pictures, bitmap and
+      placed `art`, `picture` (images that follow a value), per-kind layout defaults; editor Look section and
+      Assets tab. A skin without looks builds byte-identical to before.
 - [x] Browser editor for layouts, `studio.py serve` (2026-09-25): canvas drawn by the browser renderer, move/resize,
       inspector, tabs, modes, Q-Link sets, theme colours, `art_css` editing with fonts, SVG art import, checks.
       Verified offline in Chromium: load and save without edits gives the identical file. Double-click launchers
