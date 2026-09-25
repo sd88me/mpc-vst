@@ -60,7 +60,9 @@ class Art:
 
     # ---- commands ----
     def load_theme(self, path):
-        lines = [l.strip() for l in open(path) if l.strip() and not l.strip().startswith("#")]
+        self.theme_lines([l.strip() for l in open(path) if l.strip() and not l.strip().startswith("#")])
+
+    def theme_lines(self, lines):
         shadow_skin.apply_theme(lines)   # font_label= sizes buttons, exactly as the skin builder does
         for l in lines:
             k, _, v = l.partition("=")
