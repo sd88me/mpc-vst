@@ -6,10 +6,6 @@ there (with the date) once it's done and seen on a device. Port-specific work li
 ## Skin controls
 Building on parameter-driven visibility (`IndexedEnabling`, NOTES "Conditional visibility").
 
-- [ ] **Mode panels on a device.** `when=<param>:<option>` is built and previewed (2026-09-25); check it on a
-      Force (suggested first use: Maze's LFO rate knob vs sync division).
-- [ ] **Browser-rendered skin on a device.** Built and previewed offline (2026-09-25); check that MPC shows the
-      RGBA knob filmstrips and button images with their transparency, and try a port on it.
 - [ ] **Font choice for live text.** Let a layout pick `Titillium Web` or `Roboto` and the weight/size for
       names and values (the only two families MPC resolves).
 - [ ] **Images that follow a value.** A per-option image set (e.g. a waveform picture per wave type) shown by
@@ -25,7 +21,8 @@ Building on parameter-driven visibility (`IndexedEnabling`, NOTES "Conditional v
 
 ## Done
 - [x] Browser renderer (`"art": "html"`, `art_css=`), SVG background art (`art file=`, studio round trip) and
-      mode panels (`when=`), offline (2026-09-25); real-font baked text comes with the browser renderer.
+      mode panels (`when=`), verified on a Force (2026-09-25); real-font baked text comes with the browser renderer.
+- [x] Popups in Maze, JV-880, Acid and Euclidier, verified on a Force (2026-09-25).
 - [x] Auto-layout picks `popup` for 7+ options; `wrapper/popup.h` shared by hand-written wrappers (2026-09-25).
 - [x] One-command offline test: `tools/test_port.sh <vst.json>` (2026-09-25).
 - [x] NOTES open issues reviewed and resolved items folded down (2026-09-25).

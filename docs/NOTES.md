@@ -409,25 +409,26 @@ chunk) and closes it only on an exact option value, so a Q-Link nudge (between o
 two-column list under the field, a pick closes it and shows the choice, a Q-Link turn steps the value with the
 list left open.
 
-**Rolled out (2026-09-25, offline-tested, not yet re-checked on a device):** `studio.py auto` picks `popup` for 7+
+**Rolled out (2026-09-25; seen working on a Force the same day):** `studio.py auto` picks `popup` for 7+
 options. Ports: Maze (LFO sync divisions), JV-880 (reverb type), Acid (scale, root, regen) and Euclidier (lane
 divisions, randomise lane); the last two have hand-written wrappers and use `wrapper/popup.h`. Not used where a
 list is filled at run time (Crate Digger's genre/style steppers): popup option text is baked into the artwork.
 The artwork font gained `#` (force-shadow fa456fc), so note names like C# show; it still has no brackets.
 
-**Mode panels: `when=<param>:<option>` (built 2026-09-25, offline only; not yet seen on a device).** Any layout line
+**Mode panels: `when=<param>:<option>` (verified on a Force 2026-09-25, "Maze Skin Test": LFO1 SYNC swaps the RATE knob for a SYNC DIV popup and shows mode-only art).** Any layout line
 can carry it. Its components get the same `IndexedEnabling/<option>/<count>/Parameter <p>` handle (with
 `showWhenDataModelInvalid: "Show"`) as the popup list; its baked parts (frame, title, text boxes, group labels)
 are drawn into a per-mode image, the page background redrawn with that mode's parts and cropped to them, placed
 over the base background (which leaves them out). A popup's list itself isn't tagged, so a list left open
 while the mode changes stays open until a pick.
 
-## Browser-rendered artwork (built 2026-09-25, offline only; not yet seen on a device)
+## Browser-rendered artwork (verified on a Force 2026-09-25, "Maze Skin Test")
 `tools/html_art.py` takes shadow_art.c's stdin commands and draws them as SVG in headless Chromium (Playwright
 1.47, `tools/html_art/Dockerfile`), so the layout and skin builder are unchanged. Maze Voice's whole skin renders
 in about 7 s. Differences that matter on a device: knob/slider filmstrips and the images of toggles, buttons and
 option segments are **RGBA** (transparent edges, so they sit on art); stock skins' filmstrips are PNGs with
-alpha, but that MPC honours alpha in a `Button`'s on/off images is untested. Backgrounds, mode images and popup
+alpha, and MPC also honours alpha in a `Button`'s on/off images: controls showed clean edges over a gradient.
+Real fonts, `art_css=` restyling and `art file=` SVG art all showed as previewed. Backgrounds, mode images and popup
 panels stay opaque. `art file=` (SVG art) is only drawn by this renderer; shadow_skin refuses it otherwise.
 
 ## Patching MPC's own picker: not practical (checked 2026-09-25)
