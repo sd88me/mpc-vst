@@ -1,0 +1,34 @@
+{
+  "name": "Skin template",
+  "params": [
+    {"key": "param_knob", "name": "Knob", "min": 0, "max": 1},
+    {"key": "param_vslider", "name": "V Slider", "min": 0, "max": 1},
+    {"key": "param_hslider", "name": "H Slider", "min": 0, "max": 1},
+    {"key": "param_toggle", "name": "Toggle", "options": ["Off", "On"]},
+    {"key": "param_trigger", "name": "Button", "min": 0, "max": 1, "momentary": true},
+    {"key": "param_choice", "name": "Choice", "options": ["One", "Two", "Three"]},
+    {"key": "param_segments", "name": "Segments", "options": ["A", "B", "C"]},
+    {"key": "param_readout", "name": "Readout", "min": 0, "max": 1, "type": "readout"},
+    {"key": "param_popup", "name": "Popup", "options": ["One", "Two", "Three", "Four"]},
+    {"key": "param_stepper", "name": "Stepper", "min": 0, "max": 127, "type": "stepper", "display": "int"},
+    {"key": "param_stepper_prev", "name": "Stepper Prev", "min": 0, "max": 1, "momentary": true},
+    {"key": "param_stepper_next", "name": "Stepper Next", "min": 0, "max": 1, "momentary": true},
+    {"key": "param_row_1", "name": "Row 1", "min": 0, "max": 1, "type": "slot"},
+    {"key": "param_row_2", "name": "Row 2", "min": 0, "max": 1, "type": "slot"},
+    {"key": "param_row_3", "name": "Row 3", "min": 0, "max": 1, "type": "slot"},
+    {"key": "param_row_4", "name": "Row 4", "min": 0, "max": 1, "type": "slot"},
+    {"key": "param_row_5", "name": "Row 5", "min": 0, "max": 1, "type": "slot"},
+    {"key": "param_row_6", "name": "Row 6", "min": 0, "max": 1, "type": "slot"},
+    {"key": "param_row_7", "name": "Row 7", "min": 0, "max": 1, "type": "slot"},
+    {"key": "param_row_8", "name": "Row 8", "min": 0, "max": 1, "type": "slot"},
+    {"key": "param_mode", "name": "Mode", "options": ["Free", "Sync"]},
+    {"key": "param_rate", "name": "Rate", "min": 0, "max": 1},
+    {"key": "param_division", "name": "Division", "options": ["1/1", "1/2", "1/4", "1/8", "1/16", "1/32", "1/64"]}
+  ],
+  "sections": [
+    {"label": "Controls", "keys": ["param_knob", "param_vslider", "param_hslider", "param_toggle", "param_trigger", "param_choice", "param_segments"]},
+    {"label": "Text", "keys": ["param_readout", "param_popup", "param_stepper", "param_stepper_prev", "param_stepper_next"]},
+    {"label": "Rows", "keys": ["param_row_1", "param_row_2", "param_row_3", "param_row_4", "param_row_5", "param_row_6", "param_row_7", "param_row_8"]},
+    {"label": "Mode", "keys": ["param_mode", "param_rate", "param_division"]}
+  ]
+}

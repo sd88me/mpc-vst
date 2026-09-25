@@ -8,6 +8,8 @@ Building on parameter-driven visibility (`IndexedEnabling`, NOTES "Conditional v
 
 - [ ] **Font choice for live text.** Let a layout pick `Titillium Web` or `Roboto` and the weight/size for
       names and values (the only two families MPC resolves).
+- [ ] **Build and preview from the browser editor.** A button in `studio.py serve` that builds the port's skin and
+      shows `studio.py preview`'s pages (needs the port's vst.json and the renderer's Docker image).
 - [ ] **Images that follow a value.** A per-option image set (e.g. a waveform picture per wave type) shown by
       `IndexedEnabling` on the parameter.
 
@@ -20,6 +22,11 @@ Building on parameter-driven visibility (`IndexedEnabling`, NOTES "Conditional v
       and `tools/probe_device.sh` after firmware updates. Needs the hardware.
 
 ## Done
+- [x] Browser editor for layouts, `studio.py serve` (2026-09-25): canvas drawn by the browser renderer, move/resize,
+      inspector, tabs, modes, Q-Link sets, theme colours, `art_css` editing with fonts, SVG art import, checks.
+      Verified offline in Chromium: load and save without edits gives the identical file. Double-click launchers
+      (`SkinStudio.command` / `.bat` / `.sh`) with a start screen; the `.sh` one tested on Linux, the macOS and
+      Windows ones not yet run on those systems.
 - [x] Browser renderer (`"art": "html"`, `art_css=`), SVG background art (`art file=`, studio round trip) and
       mode panels (`when=`), verified on a Force (2026-09-25); real-font baked text comes with the browser renderer.
 - [x] Popups in Maze, JV-880, Acid and Euclidier, verified on a Force (2026-09-25).

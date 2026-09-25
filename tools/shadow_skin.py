@@ -106,18 +106,26 @@ def parse_layout(path):
             m = re.match(r'qlinks\s+"([^"]+)"\s*=\s*(.+)$', line)
             tabs[-1]["qlinks"].append((m.group(1), [k.strip() for k in m.group(2).split(",") if k.strip()]))
             continue
-        toks = shlex.split(line)
-        w = {"kind": toks[0]}
-        for t in toks[1:]:
-            k, _, v = t.partition("=")
-            w[k] = v
-        for k in ("x", "y", "w", "h", "cx", "cy", "r", "sw", "rows", "cols", "th", "gap"):
-            if k in w:
-                w[k] = int(w[k])
-        if "options" in w:
-            w["options"] = w["options"].split(",")
-        tabs[-1]["widgets"].append(w)
+        tabs[-1]["widgets"].append(parse_widget(line))
     return tabs, top
+
+
+INT_KEYS = ("x", "y", "w", "h", "cx", "cy", "r", "sw", "rows", "cols", "th", "gap")
+
+
+def parse_widget(line):
+    """One widget line -> dict (kind, then its key=value fields; numbers as ints, options as a list)."""
+    toks = shlex.split(line)
+    w = {"kind": toks[0]}
+    for t in toks[1:]:
+        k, _, v = t.partition("=")
+        w[k] = v
+    for k in INT_KEYS:
+        if k in w:
+            w[k] = int(w[k])
+    if "options" in w:
+        w["options"] = w["options"].split(",")
+    return w
 
 
 def apply_theme(top):
