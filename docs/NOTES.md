@@ -518,6 +518,84 @@ Its findings (a retired control-socket attempt, then an in-process schwung-dx7 b
 repo's `docs/NOTES.md`. The generic lessons are in `PORTING.md`: check for an in-process engine build before
 writing a control-socket wrapper, and check an engine's data-folder convention under `MODULE_DIR`.
 
+## No `Envelope`/`EnvelopeOverlay`/`XYPad`/`Plotter` component type in any stock skin (checked 2026-09-25)
+Re-ran the "No draggable/graph widgets" check (2026-09-24) more broadly per a reverse-engineering reference
+claiming these are real, template-verified component types (with a specific `envelopeName: "Pitch"` example).
+`grep -rl '"Envelope"\|"EnvelopeOverlay"\|"XYPad"\|"Plotter"' "/usr/share/Akai/Content/Synths/"*/"Plugin
+Skins/TUI.json"` on the Force found exactly one hit: AIR TubeSynth. Inspected it directly — both occurrences
+are a **tab name** (`"tabName": "Envelope"`, TubeSynth's ADSR screen) and that tab's own `componentName`
+field, not a `"type"` value; grepping every stock `TUI.json` for `"type": "Envelope..."` / `"XYPad"` /
+`"Plotter"` (any file, not just the one hit) found zero matches anywhere. No stock instrument has a "Pitch"
+envelope skin component. This confirms and extends the earlier finding: not just "TubeSynth's own ADSR UI
+uses knobs instead" but "no shipping `TUI.json`, in any panel of any instrument, defines a component whose
+`type` is Envelope/EnvelopeOverlay/XYPad/Plotter" — the reverse-engineering reference's terminal-component
+list for these four does not match what's actually on this device. ROADMAP's Envelope/XYPad/Plotter item
+resolved as **not available**, same conclusion as the native menu picker.
+
+## KnobOverlay: works for VST2 params (verified on a Force 2026-09-25, Maze Voice)
+Every knob/slider/stepper this repo builds already fires `Show Overlay "knob overlay"` on Double Click and
+Enter (`shadow_skin.py`'s `_action`), but nothing had confirmed what actually renders. Double-clicking a
+knob on an installed port (Maze Voice) on a real device: an overlay **does** appear, and it's fully
+functional for a real VST2 parameter — shows the current value, shows the parameter's name/label, lets you
+set a value directly from the overlay (drag/tap), and reflects a live Q-Link turn or an
+`audioMasterAutomate` change from the plugin itself while it's open. Unlike the menu overlay (empty for
+VST2, NOTES.md "Native picker"), this native overlay only needs the bound `Data` handle's normalized value
+— no `effGetParameterProperties`/value-list dependency — so it plausibly worked as shipped the whole time.
+ROADMAP's "Native overlays" item resolved for `KnobOverlay`.
+
+**`NumericOverlay`: not a real overlay name (tested 2026-09-25, "Maze Skin Test").** Patched the already-
+installed test skin's knob actions from `Show Overlay "knob overlay"` to `Show Overlay "numeric overlay"`
+(every knob, reverted after) and tried it on a real device: a blank black overlay panel appears with no
+content, and it doesn't dismiss on a second double-click or Enter the way the working `knob overlay` does —
+had to navigate to a different menu and back to clear it. So `"numeric overlay"` is not a name MPC
+recognizes for a typed-entry keypad (or any working overlay); it just falls into some default/broken empty
+panel state. No native typed-value-entry overlay found under this name for VST2 params. Don't build on it;
+`popup`/steppers stay the only precise-value input this repo has.
+
+## Native `Meter` component: breaks the whole page, not just left unrendered (tested 2026-09-25, `poc/meterprobe`)
+Built a small test port (`poc/meterprobe`: `engine.c` free-runs a ~2s sawtooth "Level" param with no user
+input, `layout.conf` a single `meter ... look=native img=... peak=...` widget) to check the experimental
+native `Meter` component (`tools/shadow_skin.py`'s `look=native` path, ROADMAP "A native Meter component",
+merged unverified on `claude/native-meter-prototype`). Installed on a Force: **the whole plugin screen came
+up blank/broken** (frame, title and the readout below the meter never appeared either), not just a missing
+meter widget — MPC's own log only showed `Initialising VST: meterprobe` with nothing after, no crash, no
+error text. Isolated with a same-layout rebuild swapping the native `Meter` for the existing (already
+"built", NOTES "Control looks and images") filmstrip-fake `meter` (`strip=`/`frames=`, a plain `Knob`
+component with `knobType: "FilmStrip"`) and nothing else changed: that skin rendered completely normally
+(frame, meter art, readout all visible). So the JSON-level guessed `"type": "Meter"` component (`direction`,
+`invert`, `inactiveImage`, `peakImage`/`peakHandle`) isn't just inert — MPC's TUI parser appears to fail
+constructing the whole page when it hits an unrecognized top-level component type, unlike an unrecognized
+*attribute* on a known type (which is silently ignored elsewhere in this repo's skins). **Conclusion: the
+native `Meter` component as guessed from the reverse-engineering reference does not work on a real device
+and should not be used** — ROADMAP's ports both this item and the filmstrip-fake `meter`'s design stays the
+only working way to show a live level.
+
+## Engine-driven parameter changes never reach the display: a `wrapper/vst2_wrap.c` gap, not an MPC limit (tested 2026-09-25, `poc/meterprobe`)
+Same test port, filmstrip `meter` version (renders fine, see above): with the meter's "Level" param free-
+running inside `engine.c`'s `render()` (called continuously — confirmed by testing with the transport
+actually playing, not just sitting on the edit screen) neither the meter bar nor the "Level" readout text
+next to it moved at all, even over several seconds of playback; touching/swiping the meter did make it
+jump immediately to wherever the touch landed and updated the readout at that instant, but the free-running
+value underneath was never reflected. This looks like it contradicts NOTES.md's "Dynamic text in skins"
+entry (2026-09-24, `poc/textprobe.c`) that MPC polls a parameter's display text on its own with no plugin-
+side notification — but the mechanism is different: `poc/textprobe.c` is a **hand-written** AEffect whose
+`effGetParamDisplay` case (opcode 7) computed its text live from a counter on every call MPC made, and
+separately called `master(e, audioMasterAutomate, ...)` once a second regardless of any touch. This repo's
+**generic engine wrapper** (`wrapper/vst2_wrap.c`) is different: `setParameter()` sets `w->need_update_display`
+and defers `audioMasterAutomate`/`audioMasterUpdateDisplay` calls to the next `processReplacing()` block
+(`run_block()`, `w->release[]`/`need_update_display` handling) — but that flag is **only ever set from inside
+`setParameter()`**, i.e. only in response to a host-initiated change (a touch or a Q-Link turn). Nothing in
+`render_frames()`/`run_block()` calls back into the host when the DSP engine changes a bound parameter's
+value on its own between host-initiated calls, so MPC is never told to re-poll — it's not that MPC can't
+redraw a live plugin-driven value (textprobe already proved it can), it's that **this repo's generic wrapper
+has no code path that reports an engine-driven change to the host at all**. A future engine-driven readout
+(a meter, a "now playing" field whose text the plugin changes on its own with no user touch) built on
+`engine.h`/`vst2_wrap.c` needs a new mechanism — e.g. the engine flagging "this key changed" and the wrapper
+calling `audioMasterAutomate`/`audioMasterUpdateDisplay` from `run_block()` regardless of `setParameter()`
+having fired — that doesn't exist yet. ROADMAP's "Meters" question (does MPC redraw a FilmStrip live from an
+engine-set value) stays open for a genuinely live meter; this finding narrows it to a wrapper gap, not an
+MPC limitation.
+
 ## CPU layout (Force, 2026-09-24)
 RK3288, 4x Cortex-A17 @ 1.8 GHz (governor `performance`), `isolcpus=2-3`. MPC runs `AudioWorker0-3` (SCHED_FIFO),
 one pinned per core, plus `Audio Processing` (prio 20). Plugins run on these workers, so tracks spread across
