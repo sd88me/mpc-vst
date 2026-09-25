@@ -166,7 +166,7 @@ def short_label(name, n):
     """Fit a label to n chars of the shadow font: drop an 'LFO1 >' style prefix (the frame
     title already says it), keep only glyphs the font has, then truncate."""
     t = name.split(">")[-1].strip().upper()
-    t = "".join(c if c.isalnum() or c in " .-/%+:" else " " for c in t)
+    t = "".join(c if c.isalnum() or c in " .-/%+:#" else " " for c in t)
     return " ".join(t.split())[:n]
 
 

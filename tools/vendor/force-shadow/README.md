@@ -10,7 +10,7 @@ checkout is needed to build a skin:
 - `tools/stb_truetype.h` (force-shadow's own vendored copy of stb_truetype v1.26, public domain / MIT, by
   Sean Barrett; used for the optional `font_title=`/`font_label=` TrueType text)
 
-From [sd88me/force-shadow](https://github.com/sd88me/force-shadow) at `55f4e653f6190b67318f6c8440c5cceb3e1bd34d`, MIT licensed (`LICENSE`).
+From [sd88me/force-shadow](https://github.com/sd88me/force-shadow) at `fa456fc90d07951723ab5f4e643d906cd2ac1bca`, MIT licensed (`LICENSE`).
 
 They don't follow force-shadow's changes on their own, so skins stay the same until this copy is
 updated on purpose. To update it, from this repo's root with a force-shadow checkout at `../force-shadow`:
