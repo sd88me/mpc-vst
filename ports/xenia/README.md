@@ -34,6 +34,23 @@ This folder is laid out like the standalone port repos (mpc-vst-maze, -jv880): i
 before use. Output in `build/`: `xenia.so`, `skin/sd88me - VST - Xenia/`, `pluginlist-entry.xml`. The skin is the skin
 studio's auto-layout for now.
 
+## Device test (before installing anything)
+
+`./devtest.sh <device-ip> [rom-file]` copies two test programs to `/tmp` on the device, runs them next to MPC
+(no install, no restart) and deletes them again. The report goes to `build/devtest-report.txt`:
+- `interp_bench`: DSP56300 interpreter throughput, no ROM needed.
+- `xenia_probe`: boots the firmware from your ROM, then holds 0/1/4/8/10-note chords at DSP clock 100/75/50 %
+  and reports `speed` (seconds of audio per second, >= 1.0 is real time), the level vs. the same chord at
+  100 % (a drop = the firmware runs out of DSP time: the polyphony limit at that clock), and each emulator
+  thread's CPU.
+
+Without Docker: `./devtest.sh build` makes `build/xenia-devtest.tar`; then by hand:
+```
+ssh root@<ip> 'mkdir -p /tmp/xenia-devtest/rom && tar -xf - -C /tmp/xenia-devtest' < xenia-devtest.tar
+ssh root@<ip> 'cat > /tmp/xenia-devtest/rom/xt.mid' < <your ROM or OS update file>
+ssh root@<ip> '/tmp/xenia-devtest/run.sh /tmp/xenia-devtest/rom; rm -rf /tmp/xenia-devtest'
+```
+
 ## How it works
 
 - A worker thread owns the emulator: finds the ROM, boots the firmware (the constructor runs it until the DSP
