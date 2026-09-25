@@ -541,10 +541,19 @@ for armhf and passes `test_port.sh` under ASan without a ROM; **not yet run on a
   trades polyphony for CPU.
 - **Interpreter throughput** (`ports/xenia/tools/interp_bench.cpp`, synth-like loop, no ROM needed): ~61 MIPS
   = ~71 MHz of DSP clock on one core of a 2.8 GHz Xeon (the cloud build host). The same binary built for armhf
-  runs under QEMU (the DSP's MMU memory setup works in a 32-bit address space). The Cortex-A17 number is the
-  go/no-go and is not measured yet (`ports/xenia/bench.sh <ip>`); a guess from typical x86/A17 ratios for
-  branchy interpreter code is a few times lower, which would be short of a ~100 MHz clock even at 50 %. gearmulator's own history (its `doc/dsp_performance_history.md`) had the
-  2022 interpreter at 5.8 MIPS on a Cortex-A76, against 234-421 MIPS for the AArch64 JIT.
+  runs under QEMU (the DSP's MMU memory setup works in a 32-bit address space). **Measured on the Force
+  (2026-09-25, `devtest.sh`, RK3288 Cortex-A17 @ 1.8 GHz, `isolcpus=2-3`, MPC running normally): 13.8 MIPS,
+  16.2 MHz of DSP clock over 5.0 s** — about 4.4x slower than the x86 build host, and well short of the
+  DSP56303's 100 MHz ceiling even at low DSP Clock settings. gearmulator's own history (its
+  `doc/dsp_performance_history.md`) had the 2022 interpreter at 5.8 MIPS on a Cortex-A76, against 234-421 MIPS
+  for the AArch64 JIT, so this A17 number is in the same range as expected for interpreter-only ARM.
+- **Firmware boot test blocked on a bad ROM file, not yet run (2026-09-25).** `devtest.sh 192.168.1.44
+  upper_Am29F010.bin lower_Am29F010.bin` built and uploaded cleanly in one ssh call (the fix from the prior
+  session works), but `lower_Am29F010.bin` on the build host turned out to be a 122-byte terminal capture of
+  an `xxd` dump (ANSI colour codes, not ROM bytes) rather than the real 131072-byte half-ROM — `upper_Am29F010.bin`
+  is a good 131072-byte file. `xenia_probe` correctly reported "no ROM found" (the rom-dir listing in
+  `build/devtest-report.txt` shows the size mismatch). Once a real `lower_Am29F010.bin` half-ROM is supplied,
+  re-run `devtest.sh` to get the `xenia_probe` speed/level numbers across DSP clocks and chord sizes.
 - **Thread placement matters here more than for other ports.** The Force boots with `isolcpus=2-3` and MPC's
   SCHED_FIFO `AudioWorker`s on every core (see "CPU layout"), so the emulator's three SCHED_OTHER threads
   (worker, DSP56300, MC68331) share cores 0-1 with MPC's UI and are preempted by the audio workers there.
