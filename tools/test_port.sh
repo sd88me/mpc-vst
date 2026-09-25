@@ -20,8 +20,8 @@ build='
   for f in $SOURCES; do
     o="$PORT/build/host_${f//\//_}.o"
     case "$f" in
-      *.cpp|*.cc|*.cxx) g++ $SAN -std=gnu++11 $CFLAGS -I"$PORT/build" -c "$f" -o "$o" ;;
-      *) gcc $SAN -std=gnu11 $CFLAGS -I"$PORT/build" -c "$f" -o "$o" ;;
+      *.cpp|*.cc|*.cxx) g++ $SAN -std=gnu++11 $CFLAGS -I"$PORT/build" -I"$MV/wrapper" -c "$f" -o "$o" ;;
+      *) gcc $SAN -std=gnu11 $CFLAGS -I"$PORT/build" -I"$MV/wrapper" -c "$f" -o "$o" ;;
     esac
     OBJS="$OBJS $o"
   done
