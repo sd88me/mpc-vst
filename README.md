@@ -6,7 +6,7 @@ host. They show up as first-class track instruments and effects, with a **native
 skin** and Q-Link mapping. There's no LD_PRELOAD, no JACK bridge, and no separate process.
 
 Status: proof of concept, working on real hardware (2026-09-23, verified on a Force):
-a gain effect, a test synth, and [Maze Voice](https://github.com/sd88me/force-maze)
+a gain effect, a test synth, and [Maze Voice](https://github.com/sd88me/mpc-vst-maze)
 (a full synth engine port) all play from pads/sequencer, with custom skins and Q-Links.
 It should behave the same on other Gen1 MPC OS hardware, since the same `MPC` binary is involved; reports are welcome.
 Gen2 devices (e.g. Live III) are reported to be more locked down.
