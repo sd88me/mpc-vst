@@ -33,18 +33,6 @@ Building on parameter-driven visibility (`IndexedEnabling`, NOTES "Conditional v
       `MenuOverlay` is a different case: it is very likely the same native list picker already confirmed **empty
       for VST2** (NOTES.md "Native picker (menu overlay): not available to VST2", 2026-09-24) under its real
       component name, not a new option — `popup` stays the way to do a list.
-- [ ] **`Envelope`/`EnvelopeOverlay`, `XYPad`/`Plotter` (unverified, and in tension with an existing finding).**
-      NOTES.md's "No draggable/graph widgets in plugin skins" (2026-09-24) pulled real `TUI.json` off a device
-      from three stock synths, including TubeSynth (which has genuine ADSR envelopes), and found no
-      Envelope/graph/XY-pad component anywhere — TubeSynth fakes its envelopes with plain knobs, and the
-      conclusion drawn was that no such widget is portable to a plugin skin. The reverse-engineering reference
-      claims both types *are* template-verified terminal components in its own, larger 41-file survey, with a
-      real-looking `Envelope` JSON example (`envelopeName: "Pitch"`, `envelopeType: "ADSFR"`, full handle set).
-      These aren't necessarily contradictory (different instruments, different panels) but need resolving the
-      same way the original finding was made — pull more stock `TUI.json` off a device and find a skin that
-      actually uses one (which stock instrument has a "Pitch" envelope?) — before building anything on it; don't
-      trust a binary string table over an inspected real file.
-
 ## Porting and tooling
 - [ ] **A reference port on `engine.h` + `params.json`** (e.g. `poc/synth.c` turned into a full example), so
       the repo shows a port that needs no adapter.
@@ -72,3 +60,6 @@ Building on parameter-driven visibility (`IndexedEnabling`, NOTES "Conditional v
 - [x] NOTES open issues reviewed and resolved items folded down (2026-09-25).
 - [x] `popup` control, verified on a Force (2026-09-25).
 - [x] Generic engine interface + `adapters/schwung` (2026-09-25).
+- [x] `Envelope`/`EnvelopeOverlay`, `XYPad`/`Plotter`: checked on a Force (2026-09-25) — no stock `TUI.json`
+      defines a component of any of these types; the one grep hit (TubeSynth) was a tab name, not a component
+      type. Not available; see NOTES.md.

@@ -518,6 +518,20 @@ Its findings (a retired control-socket attempt, then an in-process schwung-dx7 b
 repo's `docs/NOTES.md`. The generic lessons are in `PORTING.md`: check for an in-process engine build before
 writing a control-socket wrapper, and check an engine's data-folder convention under `MODULE_DIR`.
 
+## No `Envelope`/`EnvelopeOverlay`/`XYPad`/`Plotter` component type in any stock skin (checked 2026-09-25)
+Re-ran the "No draggable/graph widgets" check (2026-09-24) more broadly per a reverse-engineering reference
+claiming these are real, template-verified component types (with a specific `envelopeName: "Pitch"` example).
+`grep -rl '"Envelope"\|"EnvelopeOverlay"\|"XYPad"\|"Plotter"' "/usr/share/Akai/Content/Synths/"*/"Plugin
+Skins/TUI.json"` on the Force found exactly one hit: AIR TubeSynth. Inspected it directly — both occurrences
+are a **tab name** (`"tabName": "Envelope"`, TubeSynth's ADSR screen) and that tab's own `componentName`
+field, not a `"type"` value; grepping every stock `TUI.json` for `"type": "Envelope..."` / `"XYPad"` /
+`"Plotter"` (any file, not just the one hit) found zero matches anywhere. No stock instrument has a "Pitch"
+envelope skin component. This confirms and extends the earlier finding: not just "TubeSynth's own ADSR UI
+uses knobs instead" but "no shipping `TUI.json`, in any panel of any instrument, defines a component whose
+`type` is Envelope/EnvelopeOverlay/XYPad/Plotter" — the reverse-engineering reference's terminal-component
+list for these four does not match what's actually on this device. ROADMAP's Envelope/XYPad/Plotter item
+resolved as **not available**, same conclusion as the native menu picker.
+
 ## CPU layout (Force, 2026-09-24)
 RK3288, 4x Cortex-A17 @ 1.8 GHz (governor `performance`), `isolcpus=2-3`. MPC runs `AudioWorker0-3` (SCHED_FIFO),
 one pinned per core, plus `Audio Processing` (prio 20). Plugins run on these workers, so tracks spread across
