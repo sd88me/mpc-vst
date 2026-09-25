@@ -20,7 +20,8 @@ extern plugin_api_v2_t *move_plugin_init_v2(const void *host);
 
 static plugin_api_v2_t *api;
 
-static void *create(const char *dir) { return api->create_instance(dir, NULL); }
+/* "" not NULL: some modules (schwung-dx7) strncpy() module_dir unconditionally and crash on NULL. */
+static void *create(const char *dir) { return api->create_instance(dir ? dir : "", NULL); }
 static void destroy(void *i) { api->destroy_instance(i); }
 static void midi(void *i, const uint8_t *m, int n) { api->on_midi(i, m, n, MIDI_SOURCE_EXTERNAL); }
 static void set_param(void *i, const char *k, const char *v) { api->set_param(i, k, v); }

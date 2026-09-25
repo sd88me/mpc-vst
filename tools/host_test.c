@@ -32,6 +32,7 @@ int main(void) {
     CHECK(a && b && a != b, "two instances");
     if (!a || !b) return 1;
     CHECK(a->magic == 0x56737450 && a->npar == NPARAMS, "magic 'VstP', %d params, uid %08x", a->npar, a->uid);
+    CHECK(a->p && a->pr, "process and processReplacing both set");
     char s[256], d[256];
     int named = 0;
     for (int i = 0; i < a->npar; i++) {
@@ -76,6 +77,13 @@ int main(void) {
     double rms = sqrt(e / (40 * 256));
     printf("%s note 60 -> rms %.4f\n", rms > 1e-5 ? "ok  " : "warn", rms);   /* an effect or a silent patch may be legitimately 0 */
 
+    {   /* instance b never got a note: the legacy process() must add silence, leaving 1.0 */
+        float L1[128], R1[128], *o1[2] = {L1, R1}; int kept = 1;
+        for (int i = 0; i < 128; i++) L1[i] = R1[i] = 1.0f;
+        ((void (*)(AEffect *, float **, float **, int32_t))b->p)(b, 0, o1, 128);
+        for (int i = 0; i < 128; i++) kept &= fabsf(L1[i] - 1.0f) < 0.01f && fabsf(R1[i] - 1.0f) < 0.01f;
+        CHECK(kept, "process() accumulates into the output instead of overwriting it");
+    }
     void *ch = 0; intptr_t n = a->d(a, 23, 0, 0, &ch, 0);
     if (n > 0) {
         b->d(b, 24, 0, n, ch, 0);

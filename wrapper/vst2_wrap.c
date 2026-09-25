@@ -191,9 +191,23 @@ static void update_tempo(wrap_t *w) {
     }
 }
 
-static void processReplacing(AEffect *e, float **in, float **out, int32_t n) {
+/* accumulate=1 is VST2's legacy process(), which must ADD to the output buffers; hosts here call
+ * processReplacing, but a NULL e->process would crash any host that tried the old call. */
+static void render_frames(wrap_t *w, float **out, int32_t n, int accumulate) {
+    for (int32_t i = 0; i < n; i++) {
+        if (w->pos >= DSP_BLOCK) {
+            g_api->render(w->dsp, w->block, DSP_BLOCK);
+            w->pos = 0;
+        }
+        float l = w->block[w->pos * 2] * (1.0f / 32768.0f), r = w->block[w->pos * 2 + 1] * (1.0f / 32768.0f);
+        if (accumulate) { out[0][i] += l; out[1][i] += r; }
+        else { out[0][i] = l; out[1][i] = r; }
+        w->pos++;
+    }
+}
+
+static void run_block(AEffect *e, float **out, int32_t n, int accumulate) {
     wrap_t *w = e->object;
-    (void)in;
     if (HAS_LFO_BPM) update_tempo(w);
     /* A trigger param (e.g. Generate) fired: tell the host it is back to 0 so
      * buttons bound to it drop their highlight. Done here, not inside
@@ -204,16 +218,11 @@ static void processReplacing(AEffect *e, float **in, float **out, int32_t n) {
         w->need_update_display = 0;
         w->master(&w->fx, audioMasterUpdateDisplay, 0, 0, 0, 0.0f);
     }
-    for (int32_t i = 0; i < n; i++) {
-        if (w->pos >= DSP_BLOCK) {
-            g_api->render(w->dsp, w->block, DSP_BLOCK);
-            w->pos = 0;
-        }
-        out[0][i] = w->block[w->pos * 2] * (1.0f / 32768.0f);
-        out[1][i] = w->block[w->pos * 2 + 1] * (1.0f / 32768.0f);
-        w->pos++;
-    }
+    render_frames(w, out, n, accumulate);
 }
+
+static void processReplacing(AEffect *e, float **in, float **out, int32_t n) { (void)in; run_block(e, out, n, 0); }
+static void process(AEffect *e, float **in, float **out, int32_t n) { (void)in; run_block(e, out, n, 1); }
 
 static void copy_str(void *dst, const char *src, size_t max) {
     strncpy(dst, src, max - 1);
@@ -297,6 +306,7 @@ __attribute__((visibility("default"))) AEffect *VSTPluginMain(audioMasterCallbac
     AEffect *e = &w->fx;
     e->magic = 0x56737450; /* 'VstP' */
     e->dispatcher = dispatcher;
+    e->process = process;
     e->setParameter = setParameter;
     e->getParameter = getParameter;
     e->processReplacing = processReplacing;
