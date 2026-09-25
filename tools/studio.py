@@ -76,7 +76,7 @@ def kind_for(p):
     if opts:
         if len(opts) == 2 and opts[0] in ("off", "free", "no"):
             return "toggle"
-        return "enum_v" if len(opts) <= 6 else "enum_h"   # 7+ won't fit one column in a row
+        return "enum_v" if len(opts) <= 6 else "popup"   # 7+ won't fit one column: a field that opens a list
     return "knob"
 
 

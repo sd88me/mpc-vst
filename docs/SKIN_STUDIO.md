@@ -25,10 +25,11 @@ The tools need Python 3; the skin build and preview also need Pillow (the ports 
 - Output: pages of 2 rows × 8 slots. Row 1 is Q-Link bank 1 (Q-Links 1–8) and row 2 is bank 2 (9–16).
   Each section becomes a titled frame, and a section with more than 8 controls gets its own page.
 - Control types: numbers → knob, off/on → toggle, `momentary` / trigger → button,
-  up to 6 options → vertical selector, 7+ → two-column segments, readout/stepper → 2-slot text box.
-- Auto-layout never picks `popup`; swap an `enum_h`/`enum_v` line for
-  `popup cx= cy= w= h= key=<param>` by hand when a long option list takes too much room. The list opens
-  under the field (else above, adding columns until it fits) and closes on a pick.
+  up to 6 options → vertical selector, 7+ → `popup` (a field that opens the full list), readout/stepper →
+  2-slot text box.
+- A `popup` list opens under the field (else above, adding columns until it fits) and closes on a pick; a
+  Q-Link turn steps the value and leaves it open. Swap any `enum_h`/`enum_v` line for
+  `popup cx= cy= w= h= key=<param>` by hand when an option list takes too much room.
 - Labels are shortened to fit (an `LFO1 > ` prefix is dropped, since the frame title already says it).
 
 ## Inkscape (or Penpot) round trip
