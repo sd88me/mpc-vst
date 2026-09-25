@@ -5,7 +5,11 @@
   `wrapper/vst2_wrap.c`; parameters come from a `params.json` (`tools/params.py`). An engine already written for
   another host plugs in through its adapter (`adapters/`, e.g. `adapters/schwung/` for Maze Voice, JV-880).
 - **Engine with host-side glue** (control-socket keys that aren't DSP params, dynamic lists): write a port-specific
-  wrapper on the same ABI (see the crate digger port) with virtual parameters for the glue.
+  wrapper on the same ABI (see the crate digger port) with virtual parameters for the glue. First check whether the
+  same engine has an in-process build that fits the first category: an engine designed as an always-running
+  standalone process (control socket, shared-memory audio) gives `processReplacing` nothing to read without real
+  bridge work on the engine side. The DX7 port hit this and switched to an in-process build of the same engine.
+- A port can live in its own repo next to a checkout of this one (`MPC_VST`), as mpc-vst-maze/-dx7/-acid do.
 - **MIDI generator** (sequencer/arp): MPC ignores VST MIDI out, so send through an ALSA seq port (`poc/midiport.c`).
 - **App** (network, files, child processes): allowed, see NOTES "Beyond synths". Keep the audio thread
   non-blocking, use `posix_spawn` with LD_PRELOAD stripped (never `fork()`), and use libcurl for HTTPS.
@@ -37,6 +41,10 @@ for the pattern). This applies to every future port, not just ones that hit the 
 - [ ] Build links with `-Wl,--no-undefined` (build_port.sh does): an unresolved symbol would otherwise only
       show up as MPC crashing when the plugin loads.
 - [ ] Per-instance state; several instances may run at once.
+- [ ] An engine that scans a data folder (banks, patches, samples) under `MODULE_DIR`: check its own path
+      convention (`MODULE_DIR` itself, or `MODULE_DIR/banks/`?) against the port's on-device layout. A mismatch
+      fails silently (no files found, default patch) and an offline test built on the upstream's own folder
+      layout never shows it; build the test fixture to the port's layout.
 - [ ] State saved via chunks (`effGetChunk`/`effSetChunk`).
 - [ ] Offline x86 test: `tools/test_port.sh <port>/vst.json` prints PASSED (instances, parameter round-trip,
       options, popups, MIDI → audio, chunk restore, under ASan).

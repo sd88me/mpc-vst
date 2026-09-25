@@ -2,3 +2,4 @@ build/
 *.so
 dist/
 __pycache__/
+.scratch/
