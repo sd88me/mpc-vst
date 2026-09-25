@@ -1,0 +1,40 @@
+{
+  "name": "Xenia",
+  "params": [
+    {"key": "status", "name": "Status", "min": 0, "max": 0, "display": "string", "type": "readout"},
+    {"key": "program", "name": "Program", "min": 0, "max": 127, "default": 0, "display": "int"},
+    {"key": "bank", "name": "Bank", "options": ["A", "B"], "default": 0},
+    {"key": "dsp_clock", "name": "DSP Clock", "options": ["50%", "60%", "70%", "80%", "90%", "100%"], "default": 5},
+
+    {"key": "wave", "name": "Wavetable", "min": 0, "max": 127, "default": 0, "display": "int"},
+    {"key": "w1_start", "name": "W1 Start", "min": 0, "max": 63, "default": 0, "display": "int"},
+    {"key": "w2_start", "name": "W2 Start", "min": 0, "max": 63, "default": 0, "display": "int"},
+    {"key": "mix_w1", "name": "W1 Level", "min": 0, "max": 127, "default": 96, "display": "int"},
+    {"key": "mix_w2", "name": "W2 Level", "min": 0, "max": 127, "default": 96, "display": "int"},
+
+    {"key": "cutoff", "name": "Cutoff", "min": 0, "max": 127, "default": 127, "display": "int"},
+    {"key": "resonance", "name": "Resonance", "min": 0, "max": 127, "default": 0, "display": "int"},
+    {"key": "f1_type", "name": "Filter Type", "options": ["24dB LP", "12dB LP", "24dB BP", "12dB BP", "12dB HP", "Sin>LP", "LP>Shaper", "Dual LP/BP", "LP FM", "LP S&H", "24dB Notch", "12dB Notch", "Band Stop"], "default": 0},
+    {"key": "f1_env_amount", "name": "Filter Env", "min": -64, "max": 63, "default": 0, "display": "int"},
+    {"key": "f1_attack", "name": "F Attack", "min": 0, "max": 127, "default": 0, "display": "int"},
+    {"key": "f1_decay", "name": "F Decay", "min": 0, "max": 127, "default": 0, "display": "int"},
+    {"key": "f1_sustain", "name": "F Sustain", "min": 0, "max": 127, "default": 127, "display": "int"},
+    {"key": "f1_release", "name": "F Release", "min": 0, "max": 127, "default": 0, "display": "int"},
+
+    {"key": "amp_attack", "name": "A Attack", "min": 0, "max": 127, "default": 0, "display": "int"},
+    {"key": "amp_decay", "name": "A Decay", "min": 0, "max": 127, "default": 0, "display": "int"},
+    {"key": "amp_sustain", "name": "A Sustain", "min": 0, "max": 127, "default": 127, "display": "int"},
+    {"key": "amp_release", "name": "A Release", "min": 0, "max": 127, "default": 0, "display": "int"},
+
+    {"key": "lfo1_rate", "name": "LFO1 Rate", "min": 0, "max": 127, "default": 64, "display": "int"},
+    {"key": "lfo1_shape", "name": "LFO1 Shape", "options": ["Sine", "Triangle", "Square", "Saw", "Random", "S&H"], "default": 0},
+    {"key": "glide_time", "name": "Glide", "min": 0, "max": 127, "default": 0, "display": "int"},
+    {"key": "volume", "name": "Volume", "min": 0, "max": 127, "default": 96, "display": "int"}
+  ],
+  "sections": [
+    {"label": "Play", "keys": ["status", "program", "bank", "dsp_clock", "volume", "glide_time"]},
+    {"label": "Wave", "keys": ["wave", "w1_start", "w2_start", "mix_w1", "mix_w2", "lfo1_rate", "lfo1_shape"]},
+    {"label": "Filter", "keys": ["cutoff", "resonance", "f1_type", "f1_env_amount", "f1_attack", "f1_decay", "f1_sustain", "f1_release"]},
+    {"label": "Amp", "keys": ["amp_attack", "amp_decay", "amp_sustain", "amp_release"]}
+  ]
+}

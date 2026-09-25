@@ -1,0 +1,22 @@
+{
+  "name": "Xenia",
+  "vendor": "sd88me",
+  "uid": "XnXT",
+  "version": 1000,
+  "so": "xenia.so",
+  "params": "params.json",
+  "defines": {"MODULE_DIR": "\"/sdcard/vst/xenia\""},
+  "build": {
+    "root": ".",
+    "sources": ["src/xenia_engine.cpp"],
+    "cflags": [
+      "-std=gnu++17",
+      "-DDSP56K_FORCE_INTERPRETER=1", "-DDSP56300_DEBUGGER=0", "-DASMJIT_STATIC", "-DASMJIT_NO_AARCH64",
+      "-Isrc/gearmulator/source/framework", "-Isrc/gearmulator/source/waldi/xt",
+      "-Isrc/gearmulator/source/waldi/common", "-Isrc/gearmulator/source/cpu",
+      "-Isrc/gearmulator/source/cpu/dsp56300/source", "-Isrc/gearmulator/source/cpu/dsp56300/source/asmjit/src",
+      "-Isrc/gearmulator/source/3rdparty"
+    ],
+    "libs": ["build/core/libxenia_core.a", "-lpthread", "-ldl", "-lm"]
+  }
+}
