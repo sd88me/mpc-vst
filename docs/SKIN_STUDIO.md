@@ -56,6 +56,7 @@ MPC reads two maps from the skin's `Q-Links.json`:
   top-level `qlinks_track = key,...` line (same ordering); without it, page 1's set is used.
 
 ## Coming next
+Tracked in [ROADMAP.md](ROADMAP.md) ("Skin controls" and "Porting and tooling"), including:
 - Background artwork from the SVG: anything you draw in Inkscape becomes the page's background image.
 - Browser-rendered widgets (HTML/CSS/SVG in headless Chromium) instead of the Force Shadow renderer: any
   font, knob style, gradient or shadow, with the same layout files.

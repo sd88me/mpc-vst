@@ -22,8 +22,11 @@ Building on parameter-driven visibility (`IndexedEnabling`, NOTES "Conditional v
       `popup_of` flag handling so their lists close on a pick.
 - [ ] **A reference port on `engine.h` + `params.json`** (e.g. `poc/synth.c` turned into a full example), so
       the repo shows a port that needs no adapter.
-- [ ] **SVG drawings as background art.** Unlabelled shapes/text/images in the studio's SVG become part of the
-      page background (SKIN_STUDIO "next step").
+- [ ] **SVG drawings as background art.** Unlabelled shapes/text/images in the studio's SVG (anything drawn in
+      Inkscape) become part of the page background.
+- [ ] **Browser-rendered widgets.** Draw backgrounds, knob filmstrips and button states as HTML/CSS/SVG in headless
+      Chromium instead of the vendored Force Shadow renderer, from the same layout files: any font, knob style,
+      gradient or shadow. Would also cover "Real-font baked text" above, and pairs with SVG background art.
 
 ## Verification
 - [ ] **Stock, unmodded MPC and other models:** the ALSA MIDI-out port (`poc/midiport.c`) without MockbaMod,
