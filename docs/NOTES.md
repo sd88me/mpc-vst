@@ -547,13 +547,27 @@ for armhf and passes `test_port.sh` under ASan without a ROM; **not yet run on a
   DSP56303's 100 MHz ceiling even at low DSP Clock settings. gearmulator's own history (its
   `doc/dsp_performance_history.md`) had the 2022 interpreter at 5.8 MIPS on a Cortex-A76, against 234-421 MIPS
   for the AArch64 JIT, so this A17 number is in the same range as expected for interpreter-only ARM.
-- **Firmware boot test blocked on a bad ROM file, not yet run (2026-09-25).** `devtest.sh 192.168.1.44
-  upper_Am29F010.bin lower_Am29F010.bin` built and uploaded cleanly in one ssh call (the fix from the prior
-  session works), but `lower_Am29F010.bin` on the build host turned out to be a 122-byte terminal capture of
-  an `xxd` dump (ANSI colour codes, not ROM bytes) rather than the real 131072-byte half-ROM — `upper_Am29F010.bin`
-  is a good 131072-byte file. `xenia_probe` correctly reported "no ROM found" (the rom-dir listing in
-  `build/devtest-report.txt` shows the size mismatch). Once a real `lower_Am29F010.bin` half-ROM is supplied,
-  re-run `devtest.sh` to get the `xenia_probe` speed/level numbers across DSP clocks and chord sizes.
+- **Firmware boot test run on the device (2026-09-25), real ROM, real numbers -- verdict: not viable
+  in-process.** First attempt was blocked by a bad `lower_Am29F010.bin` (122-byte terminal capture of an
+  `xxd` dump, not ROM bytes); fixed and re-run with a correct 131072-byte half-ROM pair. `devtest.sh
+  192.168.1.44 upper_Am29F010.bin lower_Am29F010.bin` uploaded cleanly in one ssh call, and `xenia_probe`
+  booted the real firmware ("Waldorf Microwave XT Version 2.33", boot 4.3 s, DSP clock **81.9 MHz at 100 %**
+  -- the actual number to beat, well above the interpreter's ~16 MHz ceiling measured on this device).
+  Chord/clock sweep (`build/devtest-report.txt`):
+
+  | DSP clock | voices | speed | vs 100 % |
+  |---|---|---|---|
+  | 100 % | 0/1/4/8/10 | 0.12 | - |
+  | 75 % | 0/1/4/8/10 | 0.14 | 0.00-0.77 |
+  | 50 % | 0/1/4/8/10 | 0.21 | 0.98-1.02 |
+
+  Speed never gets close to 1.0 (real time) at any clock tested, down to 50 %; the interpreter is running at
+  roughly 1/5 to 1/8 of what this firmware needs even at the lowest clock. This matches the ceiling implied by
+  `interp_bench`'s ~16 MHz on this device vs. the firmware's 82 MHz PLL setting. **Conclusion: in-process
+  interpreter emulation is not viable for Xenia on the Force's Cortex-A17** -- no DSP Clock or voice cap closes
+  a 5-8x gap. Next step is one of the fallbacks in `ports/xenia/README.md`'s CPU section / `docs/DSP56300.md`
+  (a 64-bit helper process using gearmulator's AArch64 JIT, or the network DSP bridge); the ARMv7 JIT backend
+  is out of proportion to what a single port justifies unless more DSP56300 ports are planned.
 - **Thread placement matters here more than for other ports.** The Force boots with `isolcpus=2-3` and MPC's
   SCHED_FIFO `AudioWorker`s on every core (see "CPU layout"), so the emulator's three SCHED_OTHER threads
   (worker, DSP56300, MC68331) share cores 0-1 with MPC's UI and are preempted by the audio workers there.
