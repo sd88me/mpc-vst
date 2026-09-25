@@ -30,7 +30,8 @@ This folder is laid out like the standalone port repos (mpc-vst-maze, -jv880): i
 ./bench.sh [device-ip]   # interpreter throughput on the device
 ```
 
-Output in `build/`: `xenia.so`, `skin/sd88me - VST - Xenia/`, `pluginlist-entry.xml`. The skin is the skin
+`build/core/` holds whichever core (host or armhf) the last script built; each script copies its own in
+before use. Output in `build/`: `xenia.so`, `skin/sd88me - VST - Xenia/`, `pluginlist-entry.xml`. The skin is the skin
 studio's auto-layout for now.
 
 ## How it works
@@ -55,7 +56,8 @@ resampler run on others). gearmulator logs the programmed clock at boot ("Clock 
 
 | Machine | Interpreter |
 |---|---|
-| x86-64 Xeon @ 2.8 GHz (build host, idle) | see docs/NOTES.md |
+| x86-64 Xeon @ 2.8 GHz (cloud build host, one core) | ~61 MIPS = ~71 MHz of DSP clock |
+| 32-bit ARM under QEMU | runs (memory setup, interpreter); speed meaningless |
 | MPC / Force (Cortex-A17, 32-bit) | not measured yet: `./bench.sh <ip>` |
 
 If the device falls well short, the options are, in order of effort: the DSP Clock parameter; a helper

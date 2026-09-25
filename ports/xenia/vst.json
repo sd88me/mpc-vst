@@ -12,10 +12,10 @@
     "cflags": [
       "-std=gnu++17",
       "-DDSP56K_FORCE_INTERPRETER=1", "-DDSP56300_DEBUGGER=0", "-DASMJIT_STATIC", "-DASMJIT_NO_AARCH64",
-      "-Isrc/gearmulator/source/framework", "-Isrc/gearmulator/source/waldi/xt",
-      "-Isrc/gearmulator/source/waldi/common", "-Isrc/gearmulator/source/cpu",
-      "-Isrc/gearmulator/source/cpu/dsp56300/source", "-Isrc/gearmulator/source/cpu/dsp56300/source/asmjit/src",
-      "-Isrc/gearmulator/source/3rdparty"
+      "-isystem", "src/gearmulator/source/framework", "-isystem", "src/gearmulator/source/waldi/xt",
+      "-isystem", "src/gearmulator/source/waldi/common", "-isystem", "src/gearmulator/source/cpu",
+      "-isystem", "src/gearmulator/source/cpu/dsp56300/source", "-isystem", "src/gearmulator/source/cpu/dsp56300/source/asmjit/src",
+      "-isystem", "src/gearmulator/source/3rdparty"
     ],
     "libs": ["build/core/libxenia_core.a", "-lpthread", "-ldl", "-lm"]
   }
