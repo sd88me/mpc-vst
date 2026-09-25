@@ -532,6 +532,28 @@ def preview(skin_dir, out_pattern, frame=40):
                     if img:
                         img = Image.open(os.path.join(skin_dir, img)).convert("RGBA")
                         im.paste(img, (x + sx, y + sy), img)
+                elif sd["type"] == "Meter":
+                    # EXPERIMENTAL (docs/ROADMAP.md): a static approximation only -- draws the resting/inactive
+                    # image, then the peak overlay revealed by a fixed fraction `prop` from the low end of its
+                    # `direction`. This tool doesn't simulate MPC's own, unverified fill-reveal logic; the real
+                    # device may draw this quite differently, if at all.
+                    bg = sd["data"].get("inactiveImage")
+                    if bg:
+                        img = Image.open(os.path.join(skin_dir, bg)).convert("RGBA")
+                        im.paste(img, (x + sx, y + sy), img)
+                    peak = sd["data"].get("peakImage")
+                    if peak:
+                        img = Image.open(os.path.join(skin_dir, peak)).convert("RGBA")
+                        prop = frame / (shadow_skin.FRAMES - 1)
+                        direction = sd["data"].get("direction", "Up")
+                        if direction == "Right":
+                            box = (0, 0, round(sw * prop), sh)
+                        elif direction == "Down":
+                            box = (0, 0, sw, round(sh * prop))
+                        else:   # Up: fills from the bottom
+                            box = (0, sh - round(sh * prop), sw, sh)
+                        crop = img.crop(box)
+                        im.paste(crop, (x + sx + box[0], y + sy + box[1]), crop)
                 elif sd["type"] == "Label":
                     # "Name" labels show the real, device-rendered Titillium Web text on MPC
                     # (proportional, not shadow_art.c's baked bitmap font); approximate with

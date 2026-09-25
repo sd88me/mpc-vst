@@ -52,7 +52,7 @@ const TEXT = {
   list: [["key", "row parameters (<key>_1 … <key>_N)", "s"]],
 };
 for (const k of ["knob", "slider_v", "slider_h", "toggle", "menu", "meter"]) TEXT[k] = [["label", "label", "s"], ["key", "parameter", "key"]];
-const LOOK_ATTRS = ["look", "img", "img_on", "base", "strip", "frames"];
+const LOOK_ATTRS = ["look", "img", "img_on", "base", "strip", "frames", "peak", "rms"];
 
 // ---------------------------------------------------------------- state
 
@@ -1109,7 +1109,13 @@ function checks() {
         else if (wp && n !== wp.options.length) out.push({ level: "warn", tab: t, i, msg: `${where}: ${n} images for ${wp.options.length} options.` });
         if (has && (!wp || wp.options.length < 2)) out.push({ level: "error", tab: t, i, msg: `${where}: “${w.key}” is not an option parameter.` });
       }
-      if (w.kind === "meter" && !w.strip && !headGet("meter_strip")) out.push({ level: "error", tab: t, i, msg: `${where}: needs its filmstrip (Look).` });
+      if (w.kind === "meter") {
+        const native = w.look === "native" || (!LOOK_ATTRS.some(a => a in w) && headGet("meter_look") === "native");
+        const hasImg = w.img || w.peak || w.rms || headGet("meter_img") || headGet("meter_peak") || headGet("meter_rms");
+        if (native && !hasImg) out.push({ level: "error", tab: t, i, msg: `${where}: look=native needs img=, peak= or rms= (experimental).` });
+        else if (!native && !w.strip && !headGet("meter_strip"))
+          out.push({ level: "error", tab: t, i, msg: `${where}: needs its filmstrip (Look), or look=native (experimental).` });
+      }
       if (t !== S.tab) continue;   // geometry checks need the rendered boxes: this tab only
       const b = S.items[i] && S.items[i].box;
       if (S.items[i] && S.items[i].error) out.push({ level: "error", tab: t, i, msg: `${where}: ${S.items[i].error}` });

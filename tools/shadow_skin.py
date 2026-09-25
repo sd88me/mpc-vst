@@ -32,9 +32,13 @@ Layout file:
     meter   cx= cy= w= h= key=<param> strip=meter.png [frames=N]
                                                        (a display-only filmstrip following a parameter the engine sets;
                                                         experimental: see docs/SKIN_STUDIO.md)
-Controls can have looks: built-in drawings or images (look=, img=, img_on=, base=, strip=, frames=; frames and
-popups take img=), per line or as top-level defaults (knob_look=moog): see tools/skin_assets.py. Looks, images and
-pictures need the browser renderer.
+    meter   cx= cy= w= h= key=<param> look=native img=bg.png [peak=fill.png] [rms=fill2.png]
+                                                       (EXPERIMENTAL, unverified: a real native Meter component
+                                                        instead of the filmstrip above -- see docs/ROADMAP.md
+                                                        "A native Meter component")
+Controls can have looks: built-in drawings or images (look=, img=, img_on=, base=, strip=, frames=, peak=, rms=;
+frames and popups take img=), per line or as top-level defaults (knob_look=moog): see tools/skin_assets.py. Looks,
+images and pictures need the browser renderer.
     qlinks  "PAGE NAME" = key,key,...                  (optional, repeatable)
 Any widget line (frames too) can end in `when=<param>:<option>` (option name or index): it is shown only
 while that option parameter is at that option (MPC's IndexedEnabling), so a tab can swap control sets per
@@ -673,6 +677,28 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                     _name_label(0, name_y, cw, name_h, 17.0, INK),
                     _value_label(0, value_y, cw, 26, 22.0, INK_DIM)]))
                 kids.append(_placed(key, name, i, w["cx"] - cw // 2, w["cy"] - sq // 2, cw, ch))
+            elif kind == "meter" and lk and lk.get("look") == "native":
+                # EXPERIMENTAL, unverified (docs/ROADMAP.md "A native Meter component"): a real Meter component
+                # instead of a Knob/FilmStrip pretending to be one. inactiveImage is the constant background;
+                # peakImage/rmsImage are guessed (by analogy with Slider's revealedImage/revealType, a confirmed
+                # sibling mechanism) to be revealed proportionally to the bound handle -- unverified on a device.
+                mw, mh = w["w"], w["h"]
+                key = "shMeterN_%dx%d_%s" % (mw, mh, lid)
+                if key not in defs:
+                    direction = {"up": "Up", "down": "Down", "right": "Right"}.get(w.get("direction", "up").lower(), "Up")
+                    data = {"version": 5, "direction": direction, "invert": w.get("invert") in ("1", "true", "True")}
+                    for attr, field, handle in (("img", "inactiveImage", None), ("peak", "peakImage", "peakHandle"),
+                                                ("rms", "rmsImage", "rmsHandle")):
+                        if not lk.get(attr):
+                            continue
+                        img = "sh_meter_n_%s_%s" % (lid, attr)
+                        script += ["clear|" + under(), "limg|%s|%d|%d|stretch" % (lk[attr], mw, mh),
+                                   "crop|%s|0|0|%d|%d" % (art(img), mw, mh)]
+                        data[field] = img + ".png"
+                        if handle:
+                            data[handle] = "Data"
+                    defs[key] = _local(key, [], [_sub("Meter", data, _bounds(0, 0, mw, mh), "Meter")])
+                kids.append(_placed(key, name, i, w["cx"] - mw // 2, w["cy"] - mh // 2, mw, mh, focus="No"))
             elif kind == "meter":   # a filmstrip with no actions: it shows the parameter, touch does nothing
                 mw, mh = w["w"], w["h"]
                 img = "sh_meter_%dx%d%s" % (mw, mh, sfx)

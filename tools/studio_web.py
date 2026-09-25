@@ -210,6 +210,23 @@ def widget_svg(w, art, params, base_dir):
         art.ops.append(art.knob_frame(w["cx"], w["cy"], r, 40, lk))
         live += [live_text(x0, y0 + s // 2 + r + 2, cw, 20, name, 17, ss.INK),
                  live_text(x0, y0 + s // 2 + r + 24, cw, 26, "40", 22, ss.INK_DIM)]
+    elif k == "meter" and lk and lk.get("look") == "native":
+        # EXPERIMENTAL (docs/ROADMAP.md): static preview only -- the background image, then the peak image at a
+        # fixed proportion (like studio.py preview, not a simulation of MPC's own unverified reveal logic)
+        mw, mh = w["w"], w["h"]
+        x0, y0 = w["cx"] - mw // 2, w["cy"] - mh // 2
+        if lk.get("img"):
+            art.ops.append(art.image(lk["img"], x0, y0, mw, mh, "stretch"))
+        if lk.get("peak"):
+            direction = w.get("direction", "up").lower()
+            if direction == "right":
+                bx, by, bw, bh = x0, y0, round(mw * 0.4), mh
+            elif direction == "down":
+                bx, by, bw, bh = x0, y0, mw, round(mh * 0.4)
+            else:
+                bx, by, bw, bh = x0, y0 + round(mh * 0.6), mw, mh - round(mh * 0.6)
+            art.ops.append('<svg x="%d" y="%d" width="%d" height="%d" overflow="hidden">%s</svg>' % (
+                bx, by, bw, bh, art.image(lk["peak"], x0 - bx, y0 - by, mw, mh, "stretch")))
     elif k in ("slider_v", "slider_h", "meter"):
         sw_, sh_ = w["w"], w["h"]
         sq, cw = max(sw_, sh_), max(130, max(sw_, sh_))
