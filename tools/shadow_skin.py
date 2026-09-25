@@ -32,10 +32,11 @@ Layout file:
     meter   cx= cy= w= h= key=<param> strip=meter.png [frames=N]
                                                        (a display-only filmstrip following a parameter the engine sets;
                                                         experimental: see docs/SKIN_STUDIO.md)
-    meter   cx= cy= w= h= key=<param> look=native img=bg.png [peak=fill.png] [rms=fill2.png]
-                                                       (EXPERIMENTAL, unverified: a real native Meter component
-                                                        instead of the filmstrip above -- see docs/ROADMAP.md
-                                                        "A native Meter component")
+    meter   cx= cy= w= h= key=<param> look=native ...  (NOT USABLE: a real native Meter component breaks the
+                                                        whole plugin screen on a real device -- see docs/NOTES.md
+                                                        "Native `Meter` component: breaks the whole page";
+                                                        kept only so tools/skin_assets.py can refuse it with a
+                                                        clear message. Use the filmstrip meter above.)
 Controls can have looks: built-in drawings or images (look=, img=, img_on=, base=, strip=, frames=, peak=, rms=;
 frames and popups take img=), per line or as top-level defaults (knob_look=moog): see tools/skin_assets.py. Looks,
 images and pictures need the browser renderer.

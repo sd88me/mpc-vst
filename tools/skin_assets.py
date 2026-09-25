@@ -142,10 +142,11 @@ def look_of(w, defs, base_dir="."):
 def check(w, look):
     """Why this look can't be built, or None."""
     g = GROUP[w["kind"]]
-    if g == "meter" and look.get("look") == "native" and not (look.get("img") or look.get("peak") or look.get("rms")):
-        return "look=native needs img= (background), peak= or rms= (experimental: see docs/ROADMAP.md)"
-    if g == "meter" and look.get("look") != "native" and not look.get("strip"):
-        return "a meter needs strip= (its filmstrip), or look=native (experimental: see docs/ROADMAP.md)"
+    if g == "meter" and look.get("look") == "native":
+        return ("look=native (the real Meter component) breaks the whole plugin screen on a real device "
+                "(verified 2026-09-25, docs/NOTES.md) -- use strip= (the filmstrip meter) instead")
+    if g == "meter" and not look.get("strip"):
+        return "a meter needs strip= (its filmstrip)"
     if g in ("frame", "popup") and not look.get("img"):
         return "%s: only img= (a panel picture)" % w["kind"]
     if look.get("look") and look["look"] not in LOOKS[g]:

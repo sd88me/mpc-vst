@@ -1,0 +1,11 @@
+{
+  "name": "MPC Meter Probe",
+  "vendor": "sd88me",
+  "uid": "MtrP",
+  "version": 1000,
+  "so": "meterprobe.so",
+  "params": "params.json",
+  "layout": "layout.conf",
+  "art": "html",
+  "build": {"root": "../..", "sources": ["poc/meterprobe/engine.c"], "cflags": [], "libs": []}
+}

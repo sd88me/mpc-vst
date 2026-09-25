@@ -13,26 +13,19 @@ Building on parameter-driven visibility (`IndexedEnabling`, NOTES "Conditional v
 - [ ] **Looks and images on a device.** Built and previewed offline (2026-09-25): check a skin with image knobs,
       an imported filmstrip, image toggles/buttons/segments, a panel picture, a popup list picture and a `picture`
       (one image per option) on a Force.
-- [ ] **Meters.** The `meter` widget (a display-only filmstrip) is built; check on a device whether MPC redraws a
-      FilmStrip when the engine changes the parameter by itself, and at what rate, with an engine that sets one.
+- [ ] **Engine-driven live updates need a new wrapper mechanism.** Confirmed on a Force 2026-09-25
+      (`poc/meterprobe`): `wrapper/vst2_wrap.c` never calls `audioMasterAutomate`/`audioMasterUpdateDisplay`
+      for a parameter the DSP engine changes on its own between host-initiated calls (only in response to a
+      touch/Q-Link, via `setParameter`'s `need_update_display`) — so a filmstrip `meter` or any other display
+      bound to a free-running engine value never visibly updates, even during playback. Needs the engine
+      interface (`wrapper/engine.h`) or wrapper to gain a way for an engine to flag "this key changed" so
+      `run_block()` can call the host back regardless of whether `setParameter()` fired. See NOTES.md.
 - [ ] **Tab images.** MPC draws the function-key tab bar; find how stock skins give tabs on/off images (from a
       stock TUI.json, described in NOTES, not committed) and whether a plugin skin can. `Indicator`
       (`indicatorId`, `numIndicatorsInGroup`, on/off images — see below) is an unverified candidate.
-- [ ] **A native `Meter` component.** The `meter` widget bakes a `Knob`/FilmStrip readout (called "Meter" only in
-      its JSON name, not a real one). A real `Meter` type (`direction`, `peakImage`, `rmsImage`, `peakHandle`,
-      `rmsHandle`, `peakHoldHandle`/`peakHoldSize`/`peakHoldColour`, `invert`) may be a better foundation —
-      prototyped, unverified, on `claude/native-meter-prototype`. Check both against a real device once it's
-      reachable.
-- [ ] **Native overlays (unverified — from a 2026-01/02 binary reverse-engineering pass cross-checked against 41
-      shipping `TUI.json` files, not our own hardware testing).** Every knob/slider/stepper already fires
-      `Show Overlay "knob overlay"` on Double Click (`shadow_skin.py`'s knob/slider/stepper `_action` calls), but
-      nothing in NOTES.md records what it shows on a device for a VST2 parameter — worth confirming, since
-      (unlike the menu overlay) a big-knob overlay only needs the bound `Data` handle's normalized value, not a
-      live option-text list, so it plausibly already works as shipped. If it does, `NumericOverlay` (not wired up
-      anywhere yet; a typed-entry keypad, same low requirement) is a natural follow-on for precise values.
-      `MenuOverlay` is a different case: it is very likely the same native list picker already confirmed **empty
-      for VST2** (NOTES.md "Native picker (menu overlay): not available to VST2", 2026-09-24) under its real
-      component name, not a new option — `popup` stays the way to do a list.
+- [ ] **`MenuOverlay` naming check.** Very likely the same native list picker already confirmed **empty for
+      VST2** (NOTES.md "Native picker (menu overlay): not available to VST2", 2026-09-24) under its real
+      component name, not a new option — `popup` stays the way to do a list. Not separately verified.
 ## Porting and tooling
 - [ ] **A reference port on `engine.h` + `params.json`** (e.g. `poc/synth.c` turned into a full example), so
       the repo shows a port that needs no adapter.
@@ -63,3 +56,10 @@ Building on parameter-driven visibility (`IndexedEnabling`, NOTES "Conditional v
 - [x] `Envelope`/`EnvelopeOverlay`, `XYPad`/`Plotter`: checked on a Force (2026-09-25) — no stock `TUI.json`
       defines a component of any of these types; the one grep hit (TubeSynth) was a tab name, not a component
       type. Not available; see NOTES.md.
+- [x] `KnobOverlay`: verified on a Force (2026-09-25, Maze Voice) — works fully for VST2 params (value, name,
+      settable, reflects live Q-Link/automated changes). `NumericOverlay`: tested on a Force (2026-09-25,
+      Maze Skin Test) — not a recognized overlay name, shows a blank/stuck panel instead. See NOTES.md.
+- [x] Native `Meter` component: tested on a Force (2026-09-25, `poc/meterprobe`) — breaks the whole plugin
+      screen (blank), not just left unrendered. Not usable; `look=native` now refuses at build time
+      (`tools/skin_assets.py`) instead of building a broken skin (the filmstrip-fake `meter` stays the
+      only way to show a level). See NOTES.md.
