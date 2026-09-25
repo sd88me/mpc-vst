@@ -24,6 +24,9 @@ Layout file:
     stepper cx= cy= w= h= label="..." key=<param>      (live text; arrows = <param>_prev / <param>_next)
     list    x= y= w= h= cols= rows= th= gap= key=<p>   (rows = params <p>_1..<p>_N: text + tap)
     qlinks  "PAGE NAME" = key,key,...                  (optional, repeatable)
+Any widget line (frames too) can end in `when=<param>:<option>` (option name or index): it is shown only
+while that option parameter is at that option (MPC's IndexedEnabling), so a tab can swap control sets per
+mode. Its baked parts (frame, title, text boxes, group labels) go into a per-mode image over the background.
 Top level: `qlinks_track = key,...` sets the Q-Links used outside page-follow mode (default: page 1's).
 Top-level `style=` / `theme_<name>=RRGGBB` lines are the shadow_page.conf ones; `color=` on a
 button overrides its fill.
@@ -258,6 +261,45 @@ def button_rect(w):
     return (w["cx"] - bw // 2, w["cy"] - bh // 2, bw, bh)
 
 
+def baked_cmds(w, title_font=None):
+    """shadow_art commands for the parts of w baked into the page background (frames, text boxes,
+    list tiles, group labels); the controls themselves are separate images/components."""
+    cmds = []
+    if w["kind"] == "frame":
+        if title_font and w.get("title"):   # the title is drawn with the real font afterwards
+            cmds.append("frameblank|%d|%d|%d|%d" % (w["x"], w["y"], w["w"], w["h"]))
+        else:
+            cmds.append("frame|%d|%d|%d|%d|%s" % (w["x"], w["y"], w["w"], w["h"], w.get("title") or "-"))
+    elif w["kind"] in ("readout", "stepper", "menu", "popup"):
+        op = "readout" if w["kind"] in ("menu", "popup") else w["kind"]
+        if w["kind"] in ("readout", "stepper") and w.get("style") == "dotmatrix":
+            op = "dot" + op
+        cmds.append("%s|%d|%d|%d|%d|%s" % (op, w["cx"], w["cy"], w["w"], w["h"], w.get("label") or "-"))
+    elif w["kind"] == "list":
+        for (x, y, tw, th) in list_tiles(w):
+            cmds.append("tile|%d|%d|%d|%d|%s|%s|0" % (x, y, tw, th, LCD, LINE))
+    return cmds + label_cmds(w)
+
+
+def baked_rect(w):
+    """Area (shadow coords) that baked_cmds(w) draws into, generously; None if it draws nothing."""
+    k = w["kind"]
+    if k == "frame":
+        return (w["x"] - 2, w["y"] - 2, w["w"] + 4, w["h"] + 4)
+    if k in ("readout", "stepper", "menu", "popup"):
+        return (w["cx"] - w["w"] // 2 - 4, w["cy"] - w["h"] // 2 - 34, w["w"] + 8, w["h"] + 38)
+    if k == "list":
+        return (w["x"] - 4, w["y"] - 4, w["w"] + 8, w["h"] + 8)
+    if k in ("enum_h", "enum_v") and w.get("label"):
+        rs = seg_rects(w)
+        x0, y0 = min(r[0] for r in rs), min(r[1] for r in rs)
+        x1 = max(r[0] + r[2] for r in rs)
+        lw = text_width(w["label"], LABEL_SCALE)
+        x0, x1 = min(x0, w["cx"] - lw // 2), max(x1, w["cx"] + lw // 2)
+        return (x0 - 4, y0 - 48, x1 - x0 + 8, 48)
+    return None
+
+
 # ---- TUI.json helpers ----
 
 def _bounds(x, y, w, h, focus="No", show="Show", visible="Always"):
@@ -338,8 +380,21 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
     # docs/NOTES.md's font-spacing entries) -- is blocky pixel art, not a real typeface. Optional
     # and off by default (every other port keeps the baked font unchanged).
     TITLE_FONT = os.environ.get("SHADOW_TITLE_FONT")
-    title_overlays = []   # (bg_name, x, y, title), drawn onto that background PNG after it exists
-    chevrons = []         # (bg_name, x, y): popup fields' "opens a list" marker, drawn the same way
+    decor = []    # (image, origin x, origin y, widgets): real-font titles and popup chevrons drawn after the PNG exists
+    tagged = []   # [first, end (None: up to the last), widget]: a tab's when= widgets' components in kids
+
+    def cond(w):
+        """when=<param>:<option> -> the IndexedEnabling handle that shows w only in that mode (None: always)."""
+        if not w.get("when"):
+            return None
+        k, _, o = w["when"].partition(":")
+        opts = [str(x).lower() for x in (params[index[k]].get("options") or [])] if k in index else []
+        if len(opts) < 2:
+            raise SystemExit("layout: when=%s: %r is not an option parameter" % (w["when"], k))
+        oi = opts.index(o.lower()) if o.lower() in opts else int(o) if o.isdigit() and int(o) < len(opts) else None
+        if oi is None:
+            raise SystemExit("layout: when=%s: %r is not one of %s" % (w["when"], o, ",".join(opts)))
+        return "IndexedEnabling/%d/%d/Parameter %d" % (oi, len(opts), index[k])
     theme_conf = os.path.join(work, "theme.conf")
     open(theme_conf, "w").write("\n".join(l for l in top if not l.startswith("qlinks_track")) + "\n")
     script.append("theme|" + theme_conf)
@@ -392,28 +447,36 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
         # as needlessly fragmented, even though it helped a genuinely busy one (docs/NOTES.md). A
         # future per-tab opt-in split is a plausible follow-up, not a default.
         bg = "sh_bg_%d" % t
+        base = [w for w in tab["widgets"] if not cond(w)]
         script.append("clear|" + PLATE)
-        for w in tab["widgets"]:
-            if w["kind"] == "frame":
-                if TITLE_FONT and w.get("title"):
-                    script.append("frameblank|%d|%d|%d|%d" % (w["x"], w["y"], w["w"], w["h"]))
-                    title_overlays.append((bg, w["x"], w["y"], w["title"]))
-                else:
-                    script.append("frame|%d|%d|%d|%d|%s" % (w["x"], w["y"], w["w"], w["h"], w.get("title") or "-"))
-            elif w["kind"] in ("readout", "stepper", "menu", "popup"):
-                op = "readout" if w["kind"] in ("menu", "popup") else w["kind"]
-                if w["kind"] == "popup":
-                    chevrons.append((bg, w["cx"] + w["w"] // 2 - 22, w["cy"] - Y_OFF))
-                if w["kind"] in ("readout", "stepper") and w.get("style") == "dotmatrix":
-                    op = "dot" + op
-                script.append("%s|%d|%d|%d|%d|%s" % (op, w["cx"], w["cy"], w["w"], w["h"], w.get("label") or "-"))
-            elif w["kind"] == "list":
-                for (x, y, tw, th) in list_tiles(w):
-                    script.append("tile|%d|%d|%d|%d|%s|%s|0" % (x, y, tw, th, LCD, LINE))
-            script += label_cmds(w)
+        for w in base:
+            script += baked_cmds(w, TITLE_FONT)
         script.append("crop|%s|0|%d|%d|%d" % (art(bg), Y_OFF, W, H))
+        decor.append((bg, 0, Y_OFF, base))
         kids.append(_sub("Image", {"version": 2, "imageType": "Regular", "colour": "0", "image": bg + ".png"},
                          _bounds(0, 0, W, H), "Background"))
+        # when= widgets: per mode, the background redrawn with that mode's baked parts, cropped to them
+        modes = {}
+        for w in tab["widgets"]:
+            if cond(w):
+                modes.setdefault(cond(w), []).append(w)
+        for m_i, (hnd, ws) in enumerate(modes.items()):
+            rects = [baked_rect(w) for w in ws if baked_rect(w)]
+            if not rects:
+                continue
+            bx, by = max(0, min(r_[0] for r_ in rects)), max(Y_OFF, min(r_[1] for r_ in rects))
+            bw = min(W, max(r_[0] + r_[2] for r_ in rects)) - bx
+            bh = min(Y_OFF + H, max(r_[1] + r_[3] for r_ in rects)) - by
+            img = "sh_mode_%d_%d" % (t, m_i)
+            script.append("clear|" + PLATE)
+            for w in base + ws:
+                script += baked_cmds(w, TITLE_FONT)
+            script.append("crop|%s|%d|%d|%d|%d" % (art(img), bx, by, bw, bh))
+            decor.append((img, bx, by, base + ws))
+            c = _sub("Image", {"version": 2, "imageType": "Regular", "colour": "0", "image": img + ".png"},
+                     _bounds(bx, by - Y_OFF, bw, bh), "Mode")
+            c["bounds"]["additionalInvalidatingHandles"] = [hnd]
+            kids.append(c)
         # Stepper arrow tap-zones: crop the arrow glyph ALREADY drawn into this background (by
         # widget_stepper/dot_stepper) as the tap-zone's own on/off image. An empty onImage/
         # offImage ("") makes MPC show a generic placeholder caption ("Button") over the arrow
@@ -430,6 +493,10 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
             kind = w["kind"]
             if kind not in CONTROL_KINDS:
                 continue
+            if tagged and tagged[-1][1] is None:
+                tagged[-1][1] = len(kids)
+            if cond(w):
+                tagged.append([len(kids), None, w])
             i, name = index.get(w["key"], -1), w.get("label", w["key"])
             if kind == "knob":
                 r = w["r"]
@@ -593,6 +660,11 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                                        [_button(img + "_on.png", img + "_off.png", o, n, sw, sh)])
                     kids.append(_placed(key, "%s %s" % (name, lab), i, x, y, sw, sh, focus="Yes" if o == 0 else "No"))
 
+        for n0, n1, w in tagged:   # a when= widget's components show only in its mode
+            for c in kids[n0:len(kids) if n1 is None else n1]:
+                c["bounds"]["showWhenDataModelInvalid"] = "Show"
+                c["bounds"]["additionalInvalidatingHandles"].append(cond(w))
+        tagged.clear()
         kids += on_top
         sets = tab["qlinks"] or [(tab["name"], controls[:16])]
         for sp, (title, keys) in enumerate(sets):
@@ -622,28 +694,22 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
     subprocess.run([art_bin], input="\n".join(script) + "\n", text=True, check=True)
     for ppm, png in ppms:
         png_from_ppm(ppm, png)
-    if TITLE_FONT and title_overlays:
+    for img, ox, oy, ws in decor:
+        titles = [w for w in ws if TITLE_FONT and w["kind"] == "frame" and w.get("title")]
+        pops = [w for w in ws if w["kind"] == "popup"]
+        if not titles and not pops:
+            continue
         from PIL import Image, ImageDraw, ImageFont
-        font = ImageFont.truetype(TITLE_FONT, 26)
-        by_bg = {}
-        for bg, x, y, title in title_overlays:
-            by_bg.setdefault(bg, []).append((x, y, title))
-        for bg, items in by_bg.items():
-            path = os.path.join(skin_dir, bg + ".png")
-            im = Image.open(path).convert("RGB")
-            dr = ImageDraw.Draw(im)
-            for x, y, title in items:
-                dr.text((x + 18, y + 8 - Y_OFF), title, font=font, fill="#" + ACCENT_HI)
-            im.save(path)
-    if chevrons:
-        from PIL import Image, ImageDraw
-        for bg in {c[0] for c in chevrons}:
-            path = os.path.join(skin_dir, bg + ".png")
-            im = Image.open(path).convert("RGB")
-            dr = ImageDraw.Draw(im)
-            for _, x, y in (c for c in chevrons if c[0] == bg):
-                dr.polygon([(x - 8, y - 4), (x + 8, y - 4), (x, y + 5)], fill="#" + ACCENT)
-            im.save(path)
+        path = os.path.join(skin_dir, img + ".png")
+        im = Image.open(path).convert("RGB")
+        dr = ImageDraw.Draw(im)
+        for w in titles:
+            dr.text((w["x"] + 18 - ox, w["y"] + 8 - oy), w["title"], font=ImageFont.truetype(TITLE_FONT, 26),
+                    fill="#" + ACCENT_HI)
+        for w in pops:   # the field's "opens a list" marker
+            x, y = w["cx"] + w["w"] // 2 - 22 - ox, w["cy"] - oy
+            dr.polygon([(x - 8, y - 4), (x + 8, y - 4), (x, y + 5)], fill="#" + ACCENT)
+        im.save(path)
     for img, sw_, sh_, vert in sliders:
         square_strip(os.path.join(skin_dir, img + ".png"), sw_, sh_)
     for f in os.listdir(work):

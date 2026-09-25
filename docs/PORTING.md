@@ -78,6 +78,8 @@ for the pattern). This applies to every future port, not just ones that hit the 
       `<key>__open` param after the port's own (gen_vst.py), kept by `wrapper/vst2_wrap.c`. A hand-written
       wrapper includes `wrapper/popup.h` (after params.h) and follows its usage note, or its lists won't close. `studio.py preview`
       writes a `_open` image per page with popups.
+- [ ] Controls that only matter in one mode (per oscillator type, sync on/off): `when=<param>:<option>` on their
+      layout lines, so each mode shows its own set in the same space (SKIN_STUDIO "Mode panels").
 
 ## 4. Device
 - [ ] `.so` → `/sdcard/vst/`, skin → `/sdcard/Synths/<vendor> - VST - <name>/`.

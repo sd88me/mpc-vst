@@ -6,9 +6,8 @@ there (with the date) once it's done and seen on a device. Port-specific work li
 ## Skin controls
 Building on parameter-driven visibility (`IndexedEnabling`, NOTES "Conditional visibility").
 
-- [ ] **Mode-dependent panels.** A `when=<key>:<option>` attribute on any layout widget, so a different control
-      set shows per mode (oscillator type, filter mode). `shadow_skin.py` adds the `IndexedEnabling` handle;
-      the studio preview needs a way to render each mode.
+- [ ] **Mode panels on a device.** `when=<param>:<option>` is built and previewed (2026-09-25); check it on a
+      Force (suggested first use: Maze's LFO rate knob vs sync division).
 - [ ] **Real-font baked text.** Popup options and `enum_*` segments use shadow_art's small bitmap font; draw them
       with a `.ttf` (as `title_font` does for frame titles) so option text reads like the rest of the page.
 - [ ] **Font choice for live text.** Let a layout pick `Titillium Web` or `Roboto` and the weight/size for

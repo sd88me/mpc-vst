@@ -408,19 +408,22 @@ def from_svg(svg_path):
 
 # ---------------------------------------------------------------- preview
 
-def shown(c, open_popups):
-    """Evaluate a component's IndexedEnabling handles with every parameter at 0, except 2-way ones
-    (popup "open" flags) at 1 when open_popups."""
-    for hnd in c["bounds"].get("additionalInvalidatingHandles", []):
-        m = re.match(r"IndexedEnabling/(\d+)/(\d+)/", hnd)
-        if m and int(m.group(1)) != (1 if open_popups and m.group(2) == "2" else 0):
-            return False
-    return True
+def handles(c):
+    """A component's IndexedEnabling conditions: [(option index, option count, parameter index)]."""
+    return [tuple(int(g) for g in m.groups()) for m in
+            (re.match(r"IndexedEnabling/(\d+)/(\d+)/Parameter (\d+)$", h) for h in c["bounds"].get("additionalInvalidatingHandles", []))
+            if m]
+
+
+def shown(c, state):
+    """Would MPC show component c with parameters at state {param index: option index} (others at 0)?"""
+    return all(state.get(p, 0) == i for i, n, p in handles(c))
 
 
 def preview(skin_dir, out_pattern, frame=40):
-    """Composite a built skin into PNGs (what MPC should draw), one per page, plus a
-    "<page> (popups open)" image for a page with popups. Needs Pillow."""
+    """Composite a built skin into PNGs (what MPC should draw), one per page with every option parameter
+    at its first option, plus "<page>_open" with the page's popups open and "<page>_mode<p>-<i>" for each
+    other option of a parameter that switches controls (when=). Needs Pillow."""
     from PIL import Image, ImageDraw, ImageFont
     t = json.load(open(os.path.join(skin_dir, "TUI.json")))["pageData"]
     defs = {d["key"]: d["value"] for d in t["componentDefinitions"]["localComponentDefinitions"]}
@@ -429,15 +432,21 @@ def preview(skin_dir, out_pattern, frame=40):
     pages = []
     for n, tab in enumerate(t["tabs"]):
         comps = defs[tab["componentName"]]["componentsData"]
-        pages.append((out_pattern % n, tab, False))
-        if any("IndexedEnabling" in h for c in comps for h in c["bounds"].get("additionalInvalidatingHandles", [])):
-            base, ext = os.path.splitext(out_pattern % n)
-            pages.append((base + "_open" + ext, tab, True))
-    for out, tab, open_popups in pages:
+        base, ext = os.path.splitext(out_pattern % n)
+        pages.append((out_pattern % n, tab, {}, ""))
+        opens = {int(m.group(1)) for c in comps if c["componentData"]["type"].startswith("shPopField_")
+                 for m in [re.match(r"Parameter (\d+)", c["handle remapping"]["map"][0]["value"])] if m}
+        if opens:
+            pages.append((base + "_open" + ext, tab, {p: 1 for p in opens}, " (popups open)"))
+        modes = sorted({(p, n_) for c in comps for _, n_, p in handles(c) if p not in opens})
+        for p, n_ in modes:
+            for i in range(1, n_):
+                pages.append(("%s_mode%d-%d%s" % (base, p, i, ext), tab, {p: i}, " (parameter %d = option %d)" % (p, i)))
+    for out, tab, state, note in pages:
         im = Image.new("RGB", (W, H), (0, 0, 0))
         dr = ImageDraw.Draw(im)
         for c in defs[tab["componentName"]]["componentsData"]:
-            if not shown(c, open_popups):
+            if not shown(c, state):
                 continue
             cd = c["componentData"]
             x, y, w, h = xywh(c["bounds"])
@@ -480,7 +489,7 @@ def preview(skin_dir, out_pattern, frame=40):
         qx, qy, qw, qh = [int(v) for v in tab["qlinkBoundsData"][0].split()]
         dr.rectangle([qx, qy, qx + qw, qy + qh], outline=(80, 200, 120))
         im.save(out)
-        outs.append((out, tab["tabName"] + (" (popups open)" if open_popups else "")))
+        outs.append((out, tab["tabName"] + note))
     return outs
 
 

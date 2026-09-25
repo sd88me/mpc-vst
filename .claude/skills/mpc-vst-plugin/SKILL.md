@@ -56,7 +56,8 @@ Stop any separately attached audio engines first.
   drawn into our own PNGs, or a layout `popup` (a field whose tap shows a drawn list; hidden `<key>__open` param).
   `comboBox` menus open EMPTY for VST2 params (even with a valid `.vstxml`), so don't use them.
 - Conditional visibility: `bounds.additionalInvalidatingHandles: ["IndexedEnabling/<i>/<N>/Parameter <p>"]` shows a
-  component only while param p (as an N-way choice) is at index i. Works for VST2 params; basis of `popup`.
+  component only while param p (as an N-way choice) is at index i. Works for VST2 params; basis of `popup` and
+  of layout `when=<param>:<option>` (mode panels: a line shown only in that mode; SKIN_STUDIO "Mode panels").
 - Live text fonts: only `Titillium Web` and `Roboto` (any weight/size) resolve; anything else falls back to
   Titillium. Other typefaces must be baked into PNGs.
 - Off/on: one `Button` + "Enter Pressed → Toggle Switch". Triggers (`momentary`): the wrapper sends

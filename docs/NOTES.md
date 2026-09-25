@@ -415,6 +415,13 @@ divisions, randomise lane); the last two have hand-written wrappers and use `wra
 list is filled at run time (Crate Digger's genre/style steppers): popup option text is baked into the artwork.
 The artwork font gained `#` (force-shadow fa456fc), so note names like C# show; it still has no brackets.
 
+**Mode panels: `when=<param>:<option>` (built 2026-09-25, offline only; not yet seen on a device).** Any layout line
+can carry it. Its components get the same `IndexedEnabling/<option>/<count>/Parameter <p>` handle (with
+`showWhenDataModelInvalid: "Show"`) as the popup list; its baked parts (frame, title, text boxes, group labels)
+are drawn into a per-mode image, the page background redrawn with that mode's parts and cropped to them, placed
+over the base background (which leaves them out). A popup's list itself isn't tagged, so a list left open
+while the mode changes stays open until a pick.
+
 ## Patching MPC's own picker: not practical (checked 2026-09-25)
 `/usr/bin/MPC` links JUCE statically and is stripped (no `.symtab`); of ~8000 exported dynamic symbols none
 names a menu/overlay/combo/parameter class (only ~92 JUCE-related, all typeinfo/vtables of unrelated

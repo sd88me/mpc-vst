@@ -14,7 +14,7 @@ params ──auto──► layout.conf ──to-svg──► layout.svg ──(I
 | To SVG | `tools/studio.py to-svg layout.conf -o layout.svg --params params.json` | You want to rearrange it visually |
 | From SVG | `tools/studio.py from-svg layout.svg -o layout.conf` | You've edited the SVG |
 | Build skin | the port's gen script (`shadow_skin.write_skin(...)`) | Always last |
-| Preview | `tools/studio.py preview "<skin>/Plugin Skins" -o page_%d.png` | Before deploying anything (a page with popups also gets `page_N_open.png`) |
+| Preview | `tools/studio.py preview "<skin>/Plugin Skins" -o page_%d.png` | Before deploying anything (a page with popups also gets `page_N_open.png`, and one with mode panels a `page_N_mode<p>-<i>.png` per other option) |
 
 The tools need Python 3; the skin build and preview also need Pillow (the ports run them in a
 `python:3.11-slim` container).
@@ -47,6 +47,18 @@ The tools need Python 3; the skin build and preview also need Pillow (the ports 
   background artwork is the next step (browser-rendered art, see below).
 - `to-svg` → `from-svg` without edits reproduces the layout exactly (verified on Maze Voice: identical
   `TUI.json`, Q-Links and every image).
+
+## Mode panels
+End any layout line (a frame too) with `when=<param>:<option>` to show it only while that option parameter is at
+that option (option name, any case, or its index). Stack alternatives in the same place, one line per mode:
+```
+knob  cx=221 cy=410 r=30 label="RATE" key=lfo1_rate when=lfo1_sync:free
+popup cx=221 cy=404 w=200 h=44 label="SYNC DIV" key=lfo1_div when=lfo1_sync:sync
+```
+MPC switches them itself as the parameter changes (IndexedEnabling, docs/NOTES.md). A hidden control keeps its
+Q-Link, so either leave it in the page's `qlinks` set or map only controls every mode shows. The preview draws the
+page with every option parameter at its first option, plus one `page_N_mode<p>-<i>.png` per other option (p = the
+parameter's index). One condition per line: for a control shown in two modes, repeat the line.
 
 ## Q-Links
 MPC reads two maps from the skin's `Q-Links.json`:
