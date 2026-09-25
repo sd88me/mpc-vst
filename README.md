@@ -1,4 +1,4 @@
-# mpc-vst
+# VST Plugin Development for MPC OS
 
 Native plugins for **Akai MPC OS standalone devices** (MPC Live/One/X/Key, Force).
 
