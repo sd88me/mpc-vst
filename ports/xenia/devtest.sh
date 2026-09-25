@@ -39,8 +39,8 @@ echo "== rom dir ($1)"
 ls -la "$1" 2>&1
 for f in "$1"/*; do
   [ -f "$f" ] || continue
-  printf '%s: %d bytes, first 4: ' "$f" "$(wc -c < "$f")"
-  od -An -tx1 -N4 "$f" | tr -d '\n'; echo
+  printf '%s: %d bytes, first 4 (octal): ' "$f" "$(wc -c < "$f")"
+  dd if="$f" bs=1 count=4 2>/dev/null | od -b | head -1
 done
 echo "== firmware"
 ./xenia_probe "$1" 2 2>&1
@@ -57,9 +57,16 @@ ip="$1"; shift
 ssh "root@$ip" 'rm -rf /tmp/xenia-devtest && mkdir -p /tmp/xenia-devtest/rom && tar -xf - -C /tmp/xenia-devtest' < "$tarball"
 romdir=/sdcard/vst/xenia
 if [ "$#" -gt 0 ]; then
+  # One ssh call for every ROM file (a tar stream), not one per file: several separate ssh
+  # invocations mean several separate password prompts if key auth isn't set up, and a missed
+  # one silently truncates that file's transfer instead of failing loudly. -C per file (GNU tar
+  # applies each -C to the args that follow it) stores every file at its basename, regardless of
+  # what directory it was given from, so it lands flat in rom/ on the device.
+  tarargs=()
   for rom in "$@"; do
-    ssh "root@$ip" "cat > '/tmp/xenia-devtest/rom/$(basename "$rom")'" < "$rom"
+    tarargs+=(-C "$(cd "$(dirname "$rom")" && pwd)" "$(basename "$rom")")
   done
+  tar -cf - "${tarargs[@]}" | ssh "root@$ip" 'tar -xf - -C /tmp/xenia-devtest/rom'
   romdir=/tmp/xenia-devtest/rom
 fi
 ssh "root@$ip" "/tmp/xenia-devtest/run.sh $romdir; rm -rf /tmp/xenia-devtest" | tee "$here/build/devtest-report.txt"
