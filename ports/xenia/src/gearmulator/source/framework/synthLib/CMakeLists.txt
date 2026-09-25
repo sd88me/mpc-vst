@@ -1,0 +1,109 @@
+cmake_minimum_required(VERSION 3.10)
+project(synthLib)
+
+set(SYNTHLIB_DEMO_MODE OFF CACHE BOOL "Demo Mode" FORCE)
+
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/buildconfig.h.in ${CMAKE_CURRENT_SOURCE_DIR}/buildconfig.h)
+
+add_library(synthLib STATIC)
+
+set(SOURCES
+	midi/songReset.h midi/songReset.cpp
+	midi/midiFile.h midi/smfReader.cpp midi/rcpDecoder.cpp midi/rcpInternal.h midi/rcpTrack.cpp midi/rcpTempo.cpp
+	analog/analogFilter.cpp analog/analogFilter.h
+	audiobuffer.cpp audiobuffer.h
+	audioTypes.h
+	buildconfig.h buildconfig.h.in
+	dac.cpp dac.h
+	dcFilter.h
+	device.cpp device.h
+	deviceException.cpp deviceException.h
+	deviceTypes.h
+	lv2PresetExport.cpp lv2PresetExport.h
+	midiBufferParser.cpp midiBufferParser.h
+	midiClock.cpp midiClock.h
+	midiRateLimiter.cpp midiRateLimiter.h
+	midiRoutingMatrix.cpp midiRoutingMatrix.h
+	midiToSysex.cpp midiToSysex.h
+	midiTranslator.cpp midiTranslator.h
+	midiTypes.h
+	os.cpp os.h
+	plugin.cpp plugin.h
+	mameResamplers.cpp mameResamplers.h
+	resampler.cpp resampler.h
+	resamplerInOut.cpp resamplerInOut.h
+	romLoader.cpp romLoader.h
+	sounddiverLibLoader.cpp sounddiverLibLoader.h
+	sysexRemoteControl.cpp sysexRemoteControl.h
+	sysexToMidi.cpp sysexToMidi.h
+	vstpreset.cpp vstpreset.h
+	wavReader.cpp wavReader.h
+	wavTypes.h
+	wavWriter.cpp wavWriter.h
+)
+
+target_sources(synthLib PRIVATE ${SOURCES})
+if(MSVC)
+	set_source_files_properties(midi/rcpTempo.cpp PROPERTIES COMPILE_OPTIONS /fp:precise)
+else()
+	set_source_files_properties(midi/rcpTempo.cpp PROPERTIES COMPILE_OPTIONS -fno-finite-math-only)
+endif()
+source_group("source" FILES ${SOURCES})
+
+if(EMSCRIPTEN)
+	# Of dsp56kBase, synthLib uses headers and the logger. The rest of that library is threads
+	# and OS glue that does not build for the web, so the one source file is compiled here.
+	get_target_property(DSP56KBASE_DIR dsp56kBase SOURCE_DIR)
+	target_sources(synthLib PRIVATE ${DSP56KBASE_DIR}/logging.cpp)
+	target_link_libraries(synthLib PUBLIC resample baseLib)
+	target_include_directories(synthLib PUBLIC $<TARGET_PROPERTY:dsp56kBase,INTERFACE_INCLUDE_DIRECTORIES>)
+else()
+	target_link_libraries(synthLib PUBLIC resample dsp56kBase baseLib)
+endif()
+
+if(NOT MSVC)
+	target_link_libraries(synthLib PUBLIC dl)
+endif()
+
+if(UNIX AND NOT APPLE)
+	set(THREADS_PREFER_PTHREAD_FLAG TRUE)
+	find_package(Threads REQUIRED)
+	target_link_libraries(synthLib PRIVATE Threads::Threads)
+endif()
+
+set_property(TARGET synthLib PROPERTY FOLDER "Gearmulator")
+
+target_include_directories(synthLib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
+
+if(BUILD_TESTING)
+	add_executable(dcFilter_test dcFilter_test.cpp)
+	target_link_libraries(dcFilter_test PRIVATE synthLib)
+	set_property(TARGET dcFilter_test PROPERTY FOLDER "Tests")
+	add_test(NAME dcFilter COMMAND dcFilter_test)
+
+	add_executable(dynamicSamplerate_test dynamicSamplerate_test.cpp)
+	target_link_libraries(dynamicSamplerate_test PRIVATE synthLib)
+	set_property(TARGET dynamicSamplerate_test PROPERTY FOLDER "Tests")
+	add_test(NAME dynamicSamplerate COMMAND dynamicSamplerate_test)
+
+	add_executable(midiRateLimiter_test midiRateLimiter_test.cpp)
+	target_link_libraries(midiRateLimiter_test PRIVATE synthLib)
+	set_property(TARGET midiRateLimiter_test PROPERTY FOLDER "Tests")
+	add_test(NAME midiRateLimiter COMMAND midiRateLimiter_test)
+
+	add_executable(device_test device_test.cpp)
+	target_link_libraries(device_test PRIVATE synthLib)
+	set_property(TARGET device_test PROPERTY FOLDER "Tests")
+	add_test(NAME device COMMAND device_test)
+endif()
+
+if(BUILD_TESTING)
+	add_executable(stereoPeakLimiter_test stereoPeakLimiter_test.cpp)
+	target_link_libraries(stereoPeakLimiter_test PRIVATE synthLib)
+	add_test(NAME stereoPeakLimiter COMMAND stereoPeakLimiter_test)
+	if(MSVC)
+		target_compile_options(stereoPeakLimiter_test PRIVATE /fp:precise)
+	else()
+		target_compile_options(stereoPeakLimiter_test PRIVATE -fno-finite-math-only)
+	endif()
+endif()
