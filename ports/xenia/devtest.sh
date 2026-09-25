@@ -35,8 +35,15 @@ cat /proc/cmdline | tr ' ' '\n' | grep isolcpus
 echo "MPC pid: $(pidof MPC)  load: $(cat /proc/loadavg)"
 echo "== interpreter"
 ./interp_bench 5 2>&1 | grep -v "@"
+echo "== rom dir ($1)"
+ls -la "$1" 2>&1
+for f in "$1"/*; do
+  [ -f "$f" ] || continue
+  printf '%s: %d bytes, first 4: ' "$f" "$(wc -c < "$f")"
+  od -An -tx1 -N4 "$f" | tr -d '\n'; echo
+done
 echo "== firmware"
-./xenia_probe "$1" 2 2>&1 | grep -v "^Failed to open directory"
+./xenia_probe "$1" 2 2>&1
 RUN
   chmod +x "$out/run.sh"
   tar -C "$out" -cf "$tarball" interp_bench xenia_probe run.sh
