@@ -22,17 +22,19 @@ API (JSON):
   POST /api/browse {dir}             a folder's subfolders and layout / vst.json / parameter files
   POST /api/open {path, params, create}  edit a .conf or a port's vst.json (create: "empty" | "auto")
   POST /api/quit                     stop the server
-  POST /api/render {head, widgets}   -> {vars, td3, css, items: [{svg, live, box, open}]} per widget
+  POST /api/render {head, widgets}   -> {vars, td3, css, items: [{svg, live, box, open, alts, warn}]} per widget
   POST /api/parse  {line}            -> {w} (a widget line typed by hand)
   POST /api/save   {head, tabs}      writes the layout (x.new, then renamed over it; the first save keeps x.bak)
   POST /api/file   {name, text}      writes a text file next to the layout (the art_css stylesheet)
-  POST /api/upload?name=F            raw body -> a file next to the layout (fonts, SVG artwork)
+  POST /api/upload?name=F            raw body -> a file next to the layout, or in one folder (images/x.png):
+                                     images (tools/skin_assets.py), fonts, stylesheets
 
 Document: {head: [raw lines before the first tab], tabs: [{name, lines: [item]}]}, where an item is
 {t: "w", w: {...}, raw} (a widget), {t: "q", title, keys, raw} (a qlinks line) or {t: "x", raw} (comments,
 blank lines). An item whose fields still match its raw line is written back as that line, so loading and
 saving without edits reproduces the file exactly.
 """
+import base64
 import copy
 import json
 import os
@@ -42,12 +44,13 @@ import threading
 import webbrowser
 from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import html_art  # noqa: E402
 import shadow_skin  # noqa: E402
+import skin_assets  # noqa: E402
 import studio  # noqa: E402
 
 WEB = os.path.join(HERE, "studio_web")
@@ -56,7 +59,8 @@ THEME_GLOBALS = ("TD3", "FONT_LABEL_PATH") + tuple(shadow_skin.THEME_KEYS.values
 DEFAULTS = {k: getattr(shadow_skin, k) for k in THEME_GLOBALS}
 TYPES = {".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml",
          ".ttf": "font/ttf", ".otf": "font/otf", ".woff": "font/woff", ".woff2": "font/woff2", ".png": "image/png",
-         ".json": "application/json", ".conf": "text/plain", ".txt": "text/plain"}
+         ".json": "application/json", ".conf": "text/plain", ".txt": "text/plain", ".jpg": "image/jpeg",
+         ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif"}
 
 
 # ---------------------------------------------------------------- the layout as a document
@@ -126,12 +130,22 @@ def write_file(path, data):
 
 # ---------------------------------------------------------------- drawing widgets
 
-def set_theme(head):
-    """shadow_skin's palette for these top-level lines (from its defaults, so removed lines take effect)."""
+def set_theme(head, base_dir="."):
+    """shadow_skin's palette and look defaults for these top-level lines (from its defaults, so removed lines
+    take effect), and an Art that links images through /files/ (or inlines ones outside the layout's folder)."""
     for k, v in DEFAULTS.items():
         setattr(shadow_skin, k, v)
     lines = [l.strip() for l in head if l.strip() and not l.strip().startswith("#") and "=" in l]
-    art = html_art.Art()
+    root = os.path.realpath(base_dir)
+
+    def href(path):
+        real = os.path.realpath(path)
+        if real.startswith(root + os.sep):
+            return "/files/%s?v=%d" % (quote(os.path.relpath(real, root).replace(os.sep, "/")), int(os.path.getmtime(real)))
+        with open(real, "rb") as f:
+            return "data:%s;base64,%s" % (skin_assets.MIME.get(os.path.splitext(real)[1].lower(), "image/png"),
+                                           base64.b64encode(f.read()).decode())
+    art = html_art.Art(href=href)
     art.theme_lines([l for l in lines if not l.startswith("font_label=")])
     return art, lines
 
@@ -153,30 +167,39 @@ def resolve(w, params):
     return w
 
 
-def box_of(w):
+def box_of(w, base_dir):
     k = w["kind"]
-    if k == "art":
+    if k == "art" and "w" not in w:
         return [0, Y_OFF, W, H]
-    if k in ("frame", "list"):
+    if k in ("frame", "list", "picture", "art"):
         return [w["x"], w["y"], w["w"], w["h"]]
-    _, a = studio.shape_for(w)
+    _, a = studio.shape_for(w, base_dir)
     return [a.get("x", a.get("cx", 0) - a.get("r", 0)), a.get("y", a.get("cy", 0) - a.get("r", 0)) + Y_OFF,
             a.get("width", 2 * a.get("r", 0)), a.get("height", 2 * a.get("r", 0))]
 
 
 def widget_svg(w, art, params, base_dir):
-    """-> (baked SVG, live-text SVG, selection box, open-popup SVG) for one widget, in shadow coords."""
+    """-> {svg, live, box, open, alts, warn} for one widget, in shadow coords: the baked drawing, MPC's live text,
+    the selection box, a popup's open list, a picture's image per option, a look that can't be built."""
     ss = shadow_skin
     w = resolve(w, params)
     k, p = w["kind"], params.get(w.get("key"), {})
     art.ops = []
-    live, opened = [], ""
+    live, opened, alts, warn = [], "", [], ""
     name = w.get("label") or p.get("name") or w.get("key", "")
     first = (w.get("options") or [""])[0]
+    lk = ss.look_of(w, base_dir)
+    if lk:
+        warn = skin_assets.check(w, lk) or ""
+        if warn:
+            lk = None
     if k == "art":
-        path = os.path.join(base_dir, w.get("file", ""))
-        if os.path.isfile(path):
-            art.svg_file(path, 0, Y_OFF, W, H)
+        for c in ss.baked_cmds(w, None, base_dir) if os.path.isfile(os.path.join(base_dir, w.get("file", ""))) else []:
+            art.run(c)
+    elif k == "picture":
+        for f in [x.strip() for x in w.get("files", "").split(",") if x.strip()]:
+            path = os.path.join(base_dir, f)
+            alts.append(art.image(path, w["x"], w["y"], w["w"], w["h"], w.get("fit", "contain")) if os.path.isfile(path) else "")
     elif k in ("frame", "readout", "stepper", "menu", "popup", "list"):
         for c in ss.baked_cmds(w, None, base_dir):
             art.run(c)
@@ -184,19 +207,30 @@ def widget_svg(w, art, params, base_dir):
         r = w["r"]
         s, cw = 2 * r + 10, max(130, 2 * r + 10)
         x0, y0 = w["cx"] - cw // 2, w["cy"] - s // 2
-        art.ops.append(art.knob_svg(w["cx"], w["cy"], r, 40))
+        art.ops.append(art.knob_frame(w["cx"], w["cy"], r, 40, lk))
         live += [live_text(x0, y0 + s // 2 + r + 2, cw, 20, name, 17, ss.INK),
                  live_text(x0, y0 + s // 2 + r + 24, cw, 26, "40", 22, ss.INK_DIM)]
-    elif k in ("slider_v", "slider_h"):
+    elif k in ("slider_v", "slider_h", "meter"):
         sw_, sh_ = w["w"], w["h"]
         sq, cw = max(sw_, sh_), max(130, max(sw_, sh_))
         x0, y0 = w["cx"] - cw // 2, w["cy"] - sq // 2
-        art.ops.append(art.slider_svg(w["cx"] - sw_ // 2, w["cy"] - sh_ // 2, sw_, sh_, k == "slider_v", 0.4))
-        name_y = y0 + (sq - sh_) // 2 + sh_ + 2
-        live += [live_text(x0, name_y, cw, 20, name, 17, ss.INK), live_text(x0, name_y + 22, cw, 26, "40", 22, ss.INK_DIM)]
+        art.ops.append(art.slider_frame(w["cx"] - sw_ // 2, w["cy"] - sh_ // 2, sw_, sh_, k != "slider_h", 0.4, lk)
+                       if lk or k != "meter" else
+                       '<rect x="%d" y="%d" width="%d" height="%d" style="fill:none;stroke:#%s;stroke-dasharray:4 3"/>' % (
+                           w["cx"] - sw_ // 2, w["cy"] - sh_ // 2, sw_, sh_, ss.INK_DIM))
+        if k != "meter":
+            name_y = y0 + (sq - sh_) // 2 + sh_ + 2
+            live += [live_text(x0, name_y, cw, 20, name, 17, ss.INK), live_text(x0, name_y + 22, cw, 26, "40", 22, ss.INK_DIM)]
+    elif k == "toggle" and lk:
+        x, y, tw, th = ss.toggle_rect(w, base_dir)
+        art.ops.append(art.toggle_frame(x + tw / 2, y + th / 2, 0, tw, th, lk))
+        live.append(live_text(w["cx"] - 60, y + th + 4, 120, 20, name, 15, ss.INK))
     elif k == "toggle":
         art.run("pill|%d|%d|0" % (w["cx"], w["cy"]))
         live.append(live_text(w["cx"] - 60, w["cy"] - 18 + 34, 120, 20, name, 15, ss.INK))
+    elif k == "button" and lk:
+        x, y, bw, bh = ss.button_rect(w, base_dir)
+        art.ops.append(art.button_frame(x, y, bw, bh, 0, w.get("label", ""), lk))
     elif k == "button":
         art.run("button|%d|%d|%s|%s" % (w["cx"], w["cy"], w.get("color") or ss.BTN_BG or ss.ACCENT, w.get("label", "")))
     elif k in ("enum_h", "enum_v"):
@@ -204,8 +238,11 @@ def widget_svg(w, art, params, base_dir):
             art.run(c)
         for o, (x, y, sw, sh) in enumerate(ss.seg_rects(w)):
             on = o == 0
-            art.run("seg|%d|%d|%d|%d|%s|%s|%s" % (x, y, sw, sh, ss.SEG_ON if on else ss.SEG_OFF,
-                                                  ss.SEG_ON_TX if on else ss.INK_DIM, w["options"][o]))
+            if lk:
+                art.ops.append(art.seg_frame(x, y, sw, sh, on, ss.SEG_ON_TX if on else ss.INK, w["options"][o], lk))
+            else:
+                art.run("seg|%d|%d|%d|%d|%s|%s|%s" % (x, y, sw, sh, ss.SEG_ON if on else ss.SEG_OFF,
+                                                      ss.SEG_ON_TX if on else ss.INK_DIM, w["options"][o]))
     elif k in ("readout", "menu", "popup"):
         x, y, rw, rh = w["cx"] - w["w"] // 2, w["cy"] - w["h"] // 2, w["w"], w["h"]
         dot = k == "readout" and w.get("style") == "dotmatrix"
@@ -217,7 +254,10 @@ def widget_svg(w, art, params, base_dir):
                 cx - 8, cy - 4, cx + 8, cy - 4, cx, cy + 5, ss.ACCENT))
             (px, py, pw, ph), orects = ss.popup_panel(w)
             ops, art.ops = art.ops, []
-            art.run("tile|%d|%d|%d|%d|%s|%s|2" % (px, py, pw, ph, ss.LCD, ss.ACCENT))
+            if lk:
+                art.ops.append(art.image(lk["img"], px, py, pw, ph, "stretch"))
+            else:
+                art.run("tile|%d|%d|%d|%d|%s|%s|2" % (px, py, pw, ph, ss.LCD, ss.ACCENT))
             for o, (ox, oy, ow, oh) in enumerate(orects):
                 on = o == 0
                 art.run("seg|%d|%d|%d|%d|%s|%s|%s" % (ox, oy, ow, oh, ss.SEG_ON if on else ss.LCD,
@@ -232,22 +272,21 @@ def widget_svg(w, art, params, base_dir):
         for i, (x, y, tw, th) in enumerate(ss.list_tiles(w)):
             live.append(live_text(x + 12, y, tw - 24, th, "%s %d" % (w.get("key", ""), i + 1), 24, ss.ACCENT, "start"))
     try:
-        box = box_of(w)
+        box = box_of(w, base_dir)
     except (KeyError, ValueError):
         box = None
-    return "".join(art.ops), "".join(live), box, opened
+    return {"svg": "".join(art.ops), "live": "".join(live), "box": box, "open": opened, "alts": alts, "warn": warn}
 
 
 def render(head, widgets, params, base_dir):
-    art, lines = set_theme(head)
+    art, lines = set_theme(head, base_dir)
     items = []
     for w in widgets:
         try:
-            svg, live, box, opened = widget_svg(w, art, params, base_dir)
-            items.append({"svg": svg, "live": live, "box": box, "open": opened})
+            items.append(widget_svg(w, art, params, base_dir))
         except Exception as e:   # a half-typed line: show the error on that widget, keep the rest
             msg = "needs %s=" % e.args[0] if isinstance(e, KeyError) else "%s: %s" % (type(e).__name__, e)
-            items.append({"svg": "", "live": "", "box": None, "open": "", "error": msg})
+            items.append({"svg": "", "live": "", "box": None, "open": "", "alts": [], "error": msg})
     vars_ = ";".join("--%s:%s" % (k.replace("_", "-"), html_art.hexc(v)) for k, v in art.theme.items())
     css = [l.partition("=")[2].strip() for l in lines if l.startswith("art_css=")]
     return {"vars": vars_, "td3": art.td3, "css": css, "items": items}
@@ -370,6 +409,9 @@ class Studio:
                  params_path=self.params_path, theme=html_art.THEME, defs=html_art.DEFS,
                  css=[os.path.relpath(p, self.dir) for p in self.files((".css",))],
                  art=[os.path.relpath(p, self.dir) for p in self.files((".svg",))],
+                 images=[dict(zip(("name", "w", "h"), (os.path.relpath(p, self.dir).replace(os.sep, "/"),) + tuple(skin_assets.image_size(p))))
+                         for p in self.files(skin_assets.IMAGE_EXTS)],
+                 looks=skin_assets.LOOKS, groups=skin_assets.GROUP,
                  fonts=[os.path.relpath(p, self.dir) for p in self.files((".ttf", ".otf", ".woff", ".woff2"))],
                  plugin={"w": W, "h": H, "y": Y_OFF})
         return d
@@ -433,6 +475,7 @@ def open_request(st, req):
 
 
 LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
+UPLOADS = skin_assets.IMAGE_EXTS + (".ttf", ".otf", ".woff", ".woff2", ".css")
 
 
 def handler(st, host, stop):
@@ -500,12 +543,17 @@ def handler(st, host, stop):
                 if not st.layout:
                     return self.send(409, {"error": "no layout open"})
                 if u.path == "/api/upload":
-                    name = os.path.basename(parse_qs(u.query).get("name", [""])[0])
-                    path = st.local(name) if name and not name.startswith(".") else None
-                    if not path or os.path.splitext(name)[1].lower() not in (".svg", ".ttf", ".otf", ".woff", ".woff2", ".css"):
-                        return self.send(400, {"error": "fonts (.ttf .otf .woff .woff2), .svg and .css only"})
+                    # a file name, optionally in one folder ("images/knob.png"), next to the layout
+                    parts = parse_qs(u.query).get("name", [""])[0].replace("\\", "/").split("/")
+                    ok = 1 <= len(parts) <= 2 and all(x and not x.startswith(".") for x in parts)
+                    name = "/".join(parts)
+                    path = st.local(name) if ok else None
+                    if not path or os.path.splitext(name)[1].lower() not in UPLOADS:
+                        return self.send(400, {"error": "images (%s), fonts (.ttf .otf .woff .woff2) and .css only"
+                                                        % " ".join(skin_assets.IMAGE_EXTS)})
+                    os.makedirs(os.path.dirname(path), exist_ok=True)
                     write_file(path, body)
-                    return self.send(200, {"name": name})
+                    return self.send(200, {"name": name, "size": skin_assets.image_size(path)})
                 if u.path == "/api/render":
                     return self.send(200, render(req.get("head", []), req.get("widgets", []), st.by_key, st.dir))
                 if u.path == "/api/parse":

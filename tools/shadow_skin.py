@@ -23,8 +23,18 @@ Layout file:
                                                         Needs the hidden "<param>__open" param: popup_params())
     stepper cx= cy= w= h= label="..." key=<param>      (live text; arrows = <param>_prev / <param>_next)
     list    x= y= w= h= cols= rows= th= gap= key=<p>   (rows = params <p>_1..<p>_N: text + tap)
-    art     file="drawing.svg"                         (an SVG drawing, e.g. from studio.py from-svg, drawn into the
-                                                        page background at plugin size 1280x628; browser renderer only)
+    art     file="drawing.svg" [x= y= w= h=] [fit=]    (an SVG drawing, e.g. from studio.py from-svg, or a .png/.jpg/.webp
+                                                        image, drawn into the page background: the whole plugin area, or
+                                                        the box; fit=contain|cover|stretch; browser renderer only)
+    picture x= y= w= h= key=<param> files="a.png,b.png,.." [fit=]
+                                                       (one image per option of the parameter, the current one shown:
+                                                        a when= art line per option, so mode images do the switching)
+    meter   cx= cy= w= h= key=<param> strip=meter.png [frames=N]
+                                                       (a display-only filmstrip following a parameter the engine sets;
+                                                        experimental: see docs/SKIN_STUDIO.md)
+Controls can have looks: built-in drawings or images (look=, img=, img_on=, base=, strip=, frames=; frames and
+popups take img=), per line or as top-level defaults (knob_look=moog): see tools/skin_assets.py. Looks, images and
+pictures need the browser renderer.
     qlinks  "PAGE NAME" = key,key,...                  (optional, repeatable)
 Any widget line (frames too) can end in `when=<param>:<option>` (option name or index): it is shown only
 while that option parameter is at that option (MPC's IndexedEnabling), so a tab can swap control sets per
@@ -43,6 +53,10 @@ import os
 import re
 import shlex
 import subprocess
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import skin_assets  # noqa: E402
 
 W, H, Y_OFF = 1280, 628, 86
 PLATE, INK, INK_DIM, ACCENT, ACCENT_HI = "131211", "efe9d8", "8f8878", "c1552f", "e2793f"
@@ -53,7 +67,8 @@ TD3 = False   # style=td3: frames are filled boxes, so widget crops sit on BOX, 
 FRAMES = 128               # filmstrip frames (stock strips: 128, numFrames 127)
 KNOB_QLINKS = [13, 9, 5, 1, 14, 10, 6, 2]
 CONTROL_KINDS = ("knob", "slider_v", "slider_h", "toggle", "button", "enum_h", "enum_v", "readout", "stepper", "list", "menu",
-                 "popup")
+                 "popup", "meter")
+LOOK_DEFAULTS = {}         # top-level <group>_<attr>= lines (skin_assets.py), set by apply_theme()
 OPEN_SUFFIX = "__open"     # popup: hidden wrapper-only param, 1 while the option list is shown
 POP_ROW, POP_GAP, POP_PAD = 40, 2, 6
 THEME_KEYS = {"bg": "PLATE", "ink": "INK", "ink_dim": "INK_DIM", "accent": "ACCENT", "accent_hi": "ACCENT_HI",
@@ -134,6 +149,7 @@ def apply_theme(top):
     size button/enum boxes against the real font instead of the baked font8x8 estimate -- Python
     never rasterizes with it, that's still all done by shadow_art (render_conf_preview.c)."""
     g = globals()
+    g["LOOK_DEFAULTS"] = skin_assets.defaults(top)
     for line in top:
         if line.strip() == "style=td3":
             g["TD3"] = True
@@ -143,6 +159,33 @@ def apply_theme(top):
         k, _, v = line.partition("=")
         if k.startswith("theme_") and k[6:] in THEME_KEYS:
             g[THEME_KEYS[k[6:]]] = v.strip()
+
+
+def look_of(w, base_dir="."):
+    """w's look (skin_assets.look_of with this layout's defaults), or None for the renderer's own drawing."""
+    return skin_assets.look_of(w, LOOK_DEFAULTS, base_dir)
+
+
+def expand_pictures(widgets):
+    """picture lines -> one when= art line per option (the mode images show the current one)."""
+    out = []
+    for w in widgets:
+        if w["kind"] != "picture":
+            out.append(w)
+            continue
+        if w.get("when"):
+            raise SystemExit("layout: picture %s: can't also have when= (it already follows its parameter)" % w.get("key"))
+        for i, f in enumerate(x.strip() for x in w.get("files", "").split(",")):
+            if f:
+                out.append({"kind": "art", "file": f, "x": w["x"], "y": w["y"], "w": w["w"], "h": w["h"],
+                            "fit": w.get("fit", "contain"), "when": "%s:%d" % (w["key"], i)})
+    return out
+
+
+def toggle_rect(w, base_dir="."):
+    """A toggle's image box (shadow coords): the stock pill, or its look's size."""
+    tw, th = skin_assets.toggle_size(w, look_of(w, base_dir))
+    return (w["cx"] - tw // 2, w["cy"] - th // 2, tw, th)
 
 
 def under():
@@ -264,7 +307,11 @@ def label_cmds(w):
     return []
 
 
-def button_rect(w):
+def button_rect(w, base_dir="."):
+    lk = look_of(w, base_dir)
+    if lk:
+        bw, bh = skin_assets.button_size(w, lk, text_width(w.get("label", "")) + 36)
+        return (w["cx"] - bw // 2, w["cy"] - bh // 2, bw, bh)
     bw, bh = text_width(w["label"]) + 36, 39
     if TD3:   # widget_button(): +24 wide, 48 tall, plus a 2 px outline ring
         bw, bh = bw + 24 + 4, 48 + 4
@@ -276,7 +323,15 @@ def baked_cmds(w, title_font=None, base_dir="."):
     list tiles, group labels, SVG art); the controls themselves are separate images/components."""
     cmds = []
     if w["kind"] == "art":
-        cmds.append("svg|%s|0|%d|%d|%d" % (os.path.abspath(os.path.join(base_dir, w["file"])), Y_OFF, W, H))
+        path = os.path.abspath(os.path.join(base_dir, w["file"]))
+        box = (w["x"], w["y"], w["w"], w["h"]) if "w" in w else (0, Y_OFF, W, H)
+        if path.lower().endswith(".svg"):
+            cmds.append("svg|%s|%d|%d|%d|%d" % ((path,) + box))
+        else:
+            cmds.append("image|%s|%d|%d|%d|%d|%s" % ((path,) + box + (w.get("fit", "contain"),)))
+    elif w["kind"] == "frame" and look_of(w, base_dir):   # a panel picture instead of the drawn border
+        cmds.append("iframe|%d|%d|%d|%d|%s|%s" % (w["x"], w["y"], w["w"], w["h"],
+                                                  "-" if title_font or not w.get("title") else w["title"], look_of(w, base_dir)["img"]))
     elif w["kind"] == "frame":
         if title_font and w.get("title"):   # the title is drawn with the real font afterwards
             cmds.append("frameblank|%d|%d|%d|%d" % (w["x"], w["y"], w["w"], w["h"]))
@@ -297,7 +352,7 @@ def baked_rect(w):
     """Area (shadow coords) that baked_cmds(w) draws into, generously; None if it draws nothing."""
     k = w["kind"]
     if k == "art":
-        return (0, Y_OFF, W, H)
+        return (w["x"] - 2, w["y"] - 2, w["w"] + 4, w["h"] + 4) if "w" in w else (0, Y_OFF, W, H)
     if k == "frame":
         return (w["x"] - 2, w["y"] - 2, w["w"] + 4, w["h"] + 4)
     if k in ("readout", "stepper", "menu", "popup"):
@@ -410,8 +465,20 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
             raise SystemExit("layout: when=%s: %r is not one of %s" % (w["when"], o, ",".join(opts)))
         return "IndexedEnabling/%d/%d/Parameter %d" % (oi, len(opts), index[k])
     base_dir = os.path.dirname(os.path.abspath(layout_path))
-    if any(w["kind"] == "art" for tab in tabs_in for w in tab["widgets"]) and not os.path.basename(art_bin).startswith("html_art"):
-        raise SystemExit("layout: `art` lines need the browser renderer (vst.json \"art\": \"html\")")
+    html = os.path.basename(art_bin).startswith("html_art")
+    for tab in tabs_in:
+        tab["widgets"] = expand_pictures(tab["widgets"])
+        for w in tab["widgets"]:
+            lk = look_of(w, base_dir)
+            if w["kind"] == "meter" and not lk:
+                raise SystemExit("layout: meter %s needs strip= (its filmstrip)" % w.get("key"))
+            if lk and skin_assets.check(w, lk):
+                raise SystemExit("layout: %s %s: %s" % (w["kind"], w.get("key") or w.get("title", ""), skin_assets.check(w, lk)))
+            if w["kind"] == "art" and not os.path.isfile(os.path.join(base_dir, w["file"])):
+                raise SystemExit("layout: art file=%s: no such file" % w["file"])
+            if (lk or w["kind"] == "art") and not html:
+                raise SystemExit("layout: %s %s: looks, images and art need the browser renderer (vst.json \"art\": \"html\")"
+                                 % (w["kind"], w.get("key") or w.get("file") or w.get("title", "")))
     theme_conf = os.path.join(work, "theme.conf")
     open(theme_conf, "w").write("\n".join(   # art_css= is relative to the layout; the renderer runs elsewhere
         "art_css=" + os.path.join(base_dir, l[8:].strip()) if l.startswith("art_css=") else l
@@ -423,7 +490,7 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
         ppms.append((ppm, os.path.join(skin_dir, name + ".png")))
         return ppm
 
-    radii, sliders = set(), set()
+    radii, sliders, looks = set(), set(), {}   # knob (r, look id), slider (image, w, h, vert, look id); look id -> look
     for t, tab in enumerate(tabs_in):
         kids, controls = [], []
         for w in tab["widgets"]:
@@ -445,6 +512,8 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                     raise SystemExit("layout: key %r is not a plugin parameter" % nk)
             if w["kind"] == "list":
                 controls += list_keys(w)
+                continue
+            if w["kind"] == "meter":   # display only: no Q-Link
                 continue
             p = params[index[k]]
             if w["kind"] == "popup":
@@ -517,19 +586,24 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
             if cond(w):
                 tagged.append([len(kids), None, w])
             i, name = index.get(w["key"], -1), w.get("label", w["key"])
+            lk = look_of(w, base_dir)
+            lid = skin_assets.look_id(lk)
+            sfx = "_" + lid if lk else ""
+            if lk:
+                looks[lid] = lk
             if kind == "knob":
                 r = w["r"]
                 s, cw = 2 * r + 10, max(130, 2 * r + 10)   # value label width; LFO knobs sit 138 px apart
                 name_y, name_h = s // 2 + r + 2, 20
                 value_y = name_y + name_h + 2
                 ch = value_y + 26 + 6
-                radii.add(r)
-                key = "shKnob%d" % r
+                radii.add((r, lid))
+                key = "shKnob%d%s" % (r, sfx)
                 defs.setdefault(key, _local(key, [_action("Mouse Down", "Q-Link"),
                                                   _action("Double Click", "Show Overlay", "knob overlay"),
                                                   _action("Enter Pressed", "Show Overlay", "knob overlay")], [
                     _focus(cw, ch),
-                    _sub("Knob", {"version": 5, "knobType": "FilmStrip", "filmStrip": "sh_knob_r%d.png" % r,
+                    _sub("Knob", {"version": 5, "knobType": "FilmStrip", "filmStrip": "sh_knob_r%d%s.png" % (r, sfx),
                                   "numFrames": FRAMES - 1, "invert": False, "dragOrientation": "Vertical",
                                   "handleName": "Data"}, _bounds((cw - s) // 2, 0, s, s), "Knob"),
                     _name_label(0, name_y, cw, name_h, 17.0, INK),
@@ -541,6 +615,19 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                                    "type": "Value", "handleName": "Data"},
                          _bounds(0, value_y, cw, 26), "Value")]))
                 kids.append(_placed(key, name, i, w["cx"] - cw // 2, w["cy"] - s // 2, cw, ch))
+            elif kind == "toggle" and lk:
+                tw, th = skin_assets.toggle_size(w, lk)
+                key = "shToggle_%s_%dx%d" % (lid, tw, th)
+                cw, ch = max(120, tw + 10), th + 26
+                if key not in defs:
+                    img = "sh_tog_%s_%dx%d" % (lid, tw, th)
+                    for on in (0, 1):
+                        script += ["clear|" + under(), "ltog|200|300|%d|%d|%d|%s" % (on, tw, th, skin_assets.encode(lk)),
+                                   "crop|%s|200|300|%d|%d" % (art("%s_%s" % (img, "on" if on else "off")), tw, th)]
+                    defs[key] = _local(key, [_action("Mouse Down", "Q-Link"), _action("Enter Pressed", "Toggle Switch")],
+                                       [_focus(cw, ch), _button(img + "_on.png", img + "_off.png", 1, 1, tw, th, (cw - tw) // 2, 0),
+                                        _name_label(0, th + 4, cw, 20, 15.0, INK)])
+                kids.append(_placed(key, name, i, w["cx"] - cw // 2, w["cy"] - th // 2, cw, ch))
             elif kind == "toggle":
                 key = "shToggle"
                 if key not in defs:
@@ -552,27 +639,29 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                                         _name_label(0, 34, 120, 20, 15.0, INK)])
                 kids.append(_placed(key, name, i, w["cx"] - 60, w["cy"] - 18, 120, 58))
             elif kind == "button":
-                x, y, bw, bh = button_rect(w)
-                img = "sh_btn_%s_%s" % (w["key"], slug(w["label"]))
+                x, y, bw, bh = button_rect(w, base_dir)
+                img = "sh_btn_%s_%s%s" % (w["key"], slug(w.get("label", "")), sfx)
                 base = w.get("color") or BTN_BG or ACCENT
                 for state, col in (("off", base), ("on", shade(base, 1.35))):
-                    script += ["clear|" + under(), "button|%d|%d|%s|%s" % (w["cx"], w["cy"], col, w["label"]),
+                    draw = ("lbtn|%d|%d|%d|%d|%d|%s|%s" % (x, y, bw, bh, state == "on", w.get("label", ""), skin_assets.encode(lk))
+                            if lk else "button|%d|%d|%s|%s" % (w["cx"], w["cy"], col, w["label"]))
+                    script += ["clear|" + under(), draw,
                                "crop|%s|%d|%d|%d|%d" % (art("%s_%s" % (img, state)), x, y, bw, bh)]
-                key = "shTrig_%s_%s" % (w["key"], slug(w["label"]))
+                key = "shTrig_%s_%s%s" % (w["key"], slug(w.get("label", "")), sfx)
                 defs[key] = _local(key, [_action("Mouse Down", "Q-Link"), _action("Enter Pressed", "Toggle Switch")],
                                    [_focus(bw, bh), _button(img + "_on.png", img + "_off.png", 1, 1, bw, bh)])
                 kids.append(_placed(key, name, i, x, y, bw, bh))
             elif kind in ("slider_v", "slider_h"):
                 sw_, sh_ = w["w"], w["h"]
                 vert = kind == "slider_v"
-                img = "sh_%s_%dx%d" % (kind, sw_, sh_)
-                sliders.add((img, sw_, sh_, vert))
+                img = "sh_%s_%dx%d%s" % (kind, sw_, sh_, sfx)
+                sliders.add((img, sw_, sh_, vert, lid))
                 sq = max(sw_, sh_)   # filmstrip frames are square (as stock); padding is transparent
                 cw = max(130, sq)
                 name_y, name_h = (sq - sh_) // 2 + sh_ + 2, 20
                 value_y = name_y + name_h + 2
                 ch = value_y + 26 + 6
-                key = "shSlider_%s_%dx%d" % ("v" if vert else "h", sw_, sh_)
+                key = "shSlider_%s_%dx%d%s" % ("v" if vert else "h", sw_, sh_, sfx)
                 defs.setdefault(key, _local(key, [_action("Mouse Down", "Q-Link"),
                                                   _action("Double Click", "Show Overlay", "knob overlay"),
                                                   _action("Enter Pressed", "Show Overlay", "knob overlay")], [
@@ -584,6 +673,17 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                     _name_label(0, name_y, cw, name_h, 17.0, INK),
                     _value_label(0, value_y, cw, 26, 22.0, INK_DIM)]))
                 kids.append(_placed(key, name, i, w["cx"] - cw // 2, w["cy"] - sq // 2, cw, ch))
+            elif kind == "meter":   # a filmstrip with no actions: it shows the parameter, touch does nothing
+                mw, mh = w["w"], w["h"]
+                img = "sh_meter_%dx%d%s" % (mw, mh, sfx)
+                sliders.add((img, mw, mh, 1, lid))
+                sq = max(mw, mh)
+                key = "shMeter_%dx%d%s" % (mw, mh, sfx)
+                defs.setdefault(key, _local(key, [], [
+                    _sub("Knob", {"version": 5, "knobType": "FilmStrip", "filmStrip": img + ".png", "numFrames": FRAMES - 1,
+                                  "invert": False, "dragOrientation": "Vertical", "handleName": "Data"},
+                         _bounds(0, 0, sq, sq), "Meter")]))
+                kids.append(_placed(key, name, i, w["cx"] - sq // 2, w["cy"] - sq // 2, sq, sq, focus="No"))
             elif kind == "menu":
                 x, y, rw, rh = w["cx"] - w["w"] // 2, w["cy"] - w["h"] // 2, w["w"], w["h"]
                 key = "shMenu_%dx%d" % (rw, rh)
@@ -605,8 +705,9 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                 (px, py, pw, ph), orects = popup_panel(w)
                 shown = "IndexedEnabling/1/2/Parameter %d" % oi
                 panel = "sh_pop_%d_%s" % (t, w["key"])
-                script += ["clear|" + LCD, "tile|%d|%d|%d|%d|%s|%s|2" % (px, py, pw, ph, LCD, ACCENT),
-                           "crop|%s|%d|%d|%d|%d" % (art(panel), px, py, pw, ph)]
+                panel_draw = ("image|%s|%d|%d|%d|%d|stretch" % (lk["img"], px, py, pw, ph) if lk
+                              else "tile|%d|%d|%d|%d|%s|%s|2" % (px, py, pw, ph, LCD, ACCENT))
+                script += ["clear|" + LCD, panel_draw, "crop|%s|%d|%d|%d|%d" % (art(panel), px, py, pw, ph)]
                 pkey = "shPopPanel_%d_%s" % (t, w["key"])
                 defs[pkey] = _local(pkey, [], [_sub("Image", {"version": 2, "imageType": "Regular", "colour": "0",
                                                               "image": panel + ".png"}, _bounds(0, 0, pw, ph), "Image")])
@@ -672,7 +773,10 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                     img = "sh_seg_%s_%d" % (w["key"], o)
                     lab = w["options"][o]
                     for state, fill, ink in (("on", SEG_ON, SEG_ON_TX), ("off", SEG_OFF, INK_DIM)):
-                        script += ["clear|" + under(), "seg|%d|%d|%d|%d|%s|%s|%s" % (x, y, sw, sh, fill, ink, lab),
+                        draw = ("lseg|%d|%d|%d|%d|%d|%s|%s|%s" % (x, y, sw, sh, state == "on", SEG_ON_TX if state == "on" else INK,
+                                                                   lab, skin_assets.encode(lk))
+                                if lk else "seg|%d|%d|%d|%d|%s|%s|%s" % (x, y, sw, sh, fill, ink, lab))
+                        script += ["clear|" + under(), draw,
                                    "crop|%s|%d|%d|%d|%d" % (art("%s_%s" % (img, state)), x, y, sw, sh)]
                     key = "shSeg_%s_%d" % (w["key"], o)
                     defs[key] = _local(key, [_action("Mouse Down", "Q-Link")],
@@ -706,10 +810,16 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                 "ignoreMousePresses": False, "disableCoarseDataWheel": False, "repeats": 1,
                 "hideQLinkBounds": False, "componentsData": kids}}
 
-    for img, sw_, sh_, vert in sorted(sliders):
-        script.append("sstrip|%s|%d|%d|%d|%d|%s" % (art(img), sw_, sh_, FRAMES, 1 if vert else 0, under()))
-    for r in sorted(radii):
-        script.append("strip|%s|%d|%d|%s" % (art("sh_knob_r%d" % r), r, FRAMES, under()))
+    for img, sw_, sh_, vert, lid in sorted(sliders):
+        if lid:
+            script.append("lsstrip|%s|%d|%d|%d|%d|%s" % (art(img), sw_, sh_, FRAMES, 1 if vert else 0, skin_assets.encode(looks[lid])))
+        else:
+            script.append("sstrip|%s|%d|%d|%d|%d|%s" % (art(img), sw_, sh_, FRAMES, 1 if vert else 0, under()))
+    for r, lid in sorted(radii):
+        if lid:
+            script.append("lstrip|%s|%d|%d|%s" % (art("sh_knob_r%d_%s" % (r, lid)), r, FRAMES, skin_assets.encode(looks[lid])))
+        else:
+            script.append("strip|%s|%d|%d|%s" % (art("sh_knob_r%d" % r), r, FRAMES, under()))
     subprocess.run([art_bin], input="\n".join(script) + "\n", text=True, check=True)
     for ppm, png in ppms:
         png_from_ppm(ppm, png)
@@ -729,7 +839,7 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
             x, y = w["cx"] + w["w"] // 2 - 22 - ox, w["cy"] - oy
             dr.polygon([(x - 8, y - 4), (x + 8, y - 4), (x, y + 5)], fill="#" + ACCENT)
         im.save(path)
-    for img, sw_, sh_, vert in sliders:
+    for img, sw_, sh_, vert, lid in sliders:
         square_strip(os.path.join(skin_dir, img + ".png"), sw_, sh_)
     for f in os.listdir(work):
         os.remove(os.path.join(work, f))
@@ -772,8 +882,8 @@ def qlink_bounds(tab, keys):
             r = w["r"]
             xs += [w["cx"] - 65, w["cx"] + 65]
             ys += [w["cy"] - r - 8, w["cy"] + r + 56]
-        elif w["kind"] == "button":
-            continue   # a shared trigger (e.g. GENERATE) would stretch the box across frames
+        elif w["kind"] in ("button", "meter"):
+            continue   # a shared trigger (e.g. GENERATE) would stretch the box across frames; meters take no Q-Link
         elif w["kind"] == "toggle":
             xs += [w["cx"] - 60, w["cx"] + 60]
             ys += [w["cy"] - 18, w["cy"] + 38]

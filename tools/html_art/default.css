@@ -80,3 +80,37 @@ text { font-family: var(--font); font-weight: 600; }
 .slider-well { fill: #050403; }
 .slider-fill { fill: var(--knob-dot); }
 .slider-thumb { fill: var(--knob-face); stroke: var(--knob-ring); stroke-width: 2; filter: var(--shadow); }
+
+/* control looks (layout look=, img=, strip=; tools/skin_assets.py). Built-in looks draw with these classes, so a
+ * stylesheet can recolour them; image looks only take .look-lit (the "on" state of an image with no img_on). */
+.look-lit { filter: brightness(1.35) saturate(1.1); }
+/* knob look=moog */
+.look-skirt { fill: #0d0d0d; }
+.look-knurl { fill: none; stroke: #343434; }
+.look-body { fill: #171717; stroke: #050505; stroke-width: 1.5; filter: var(--shadow); }
+.look-cap { fill: url(#metal-radial); stroke: #2a2a2a; stroke-width: 1; }
+.look-line { stroke: #f4f4f2; stroke-linecap: round; fill: none; }
+/* knob look=chicken */
+.look-base { fill: url(#metal-linear); stroke: #2b2b2b; stroke-width: 1.5; }
+.look-head { fill: #121212; stroke: #000; stroke-width: 0.02; filter: var(--shadow); }
+/* knob look=metal */
+.look-metal { fill: url(#metal-linear); stroke: #3b3b3a; stroke-width: 1.5; filter: var(--shadow); }
+.look-metal-top { fill: url(#metal-radial); }
+.look-notch { stroke: #1e1e1e; stroke-linecap: round; }
+/* knob look=cap: the theme's knob colours */
+.look-cap-ring { fill: var(--knob-ring); filter: var(--shadow); }
+.look-cap-top { fill: var(--knob-dot); }
+/* slider look=fader */
+.look-slot { fill: #050403; stroke: var(--line); stroke-width: 1; }
+.look-tick { stroke: var(--ink-faint); stroke-width: 1; }
+.look-fader { fill: #3b3b3a; stroke: #0f0f0f; stroke-width: 1; filter: var(--shadow); }
+.look-ridge { stroke: #1d1d1c; stroke-width: 1.5; }
+/* toggle look=led */
+.look-led-bezel { fill: #151515; stroke: #3d3d3d; stroke-width: 1; }
+.look-led { fill: #3a120c; }
+.on .look-led { fill: var(--accent-hi); filter: drop-shadow(0 0 5px var(--accent-hi)); }
+.look-led-glint { fill: #fff; opacity: 0.25; }
+/* toggle look=switch: a bat lever, up for on */
+.look-nut { fill: url(#metal-linear); stroke: #2b2b2b; stroke-width: 1; }
+.look-bat { fill: url(#metal-linear); stroke: #3a3a3a; stroke-width: 0.8; }
+.look-bat-tip { fill: url(#metal-radial); stroke: #3a3a3a; stroke-width: 0.8; filter: var(--shadow); }

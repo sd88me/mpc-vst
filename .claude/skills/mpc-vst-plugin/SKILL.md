@@ -152,6 +152,9 @@ Parameter entries feeding `gen_vst.py` (`tools/params.py` format) can carry:
 controls are labelled groups, Q-Links in layer descriptions), `serve` (browser editor for a layout.conf or a port's
 vst.json: drag/resize, inspector, Q-Links, theme, art_css; `tools/studio_web.py`; the repo-root `SkinStudio.*`
 launchers run `serve --open`), `preview` (built skin → PNGs). Read docs/SKIN_STUDIO.md.
+Looks and images (SKIN_STUDIO "Looks and images", `tools/skin_assets.py`): `look=` built-ins, `img=`/`img_on=`/`base=`/
+`strip=` per control or as `<group>_<attr>=` defaults, `frame`/`popup` `img=`, bitmap/placed `art`, `picture` (one
+image per option), experimental `meter`. All need `"art": "html"`. Never commit Akai's stock skin art here.
 Always `preview` before deploying. Enum `options=` are optional in layouts (they default to the parameter's own).
 
 ## CPU check and release

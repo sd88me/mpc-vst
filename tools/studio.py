@@ -210,21 +210,25 @@ def conf_line(w):
     return " ".join(parts)
 
 
-def shape_for(w):
-    """Widget (shadow coords) -> (svg tag, attrs) in plugin coords."""
+def shape_for(w, base_dir="."):
+    """Widget (shadow coords) -> (svg tag, attrs) in plugin coords. base_dir: the layout's folder (image looks
+    size toggles and buttons)."""
     k = w["kind"]
-    if k == "frame":
+    if k in ("frame", "picture") or (k == "art" and "w" in w):
         return "rect", dict(x=w["x"], y=w["y"] - Y_OFF, width=w["w"], height=w["h"])
     if k == "knob":
         return "circle", dict(cx=w["cx"], cy=w["cy"] - Y_OFF, r=w["r"])
     if k == "list":
         return "rect", dict(x=w["x"], y=w["y"] - Y_OFF, width=w["w"], height=w["h"])
-    if k in ("readout", "stepper", "slider_v", "slider_h", "menu", "popup"):
+    if k in ("readout", "stepper", "slider_v", "slider_h", "menu", "popup", "meter"):
         return "rect", dict(x=w["cx"] - w["w"] / 2, y=w["cy"] - w["h"] / 2 - Y_OFF, width=w["w"], height=w["h"])
+    if k == "toggle" and shadow_skin.look_of(w, base_dir):
+        x, y, tw, th = shadow_skin.toggle_rect(w, base_dir)
+        return "rect", dict(x=x, y=y - Y_OFF, width=tw, height=th)
     if k == "toggle":
         return "rect", dict(x=w["cx"] - 25.5, y=w["cy"] - 13.5 - Y_OFF, width=51, height=27)
     if k == "button":
-        x, y, bw, bh = shadow_skin.button_rect(w)
+        x, y, bw, bh = shadow_skin.button_rect(w, base_dir)
         return "rect", dict(x=x, y=y - Y_OFF, width=bw, height=bh)
     if k in ("enum_h", "enum_v"):
         rs = shadow_skin.seg_rects(w)
@@ -268,6 +272,13 @@ def to_svg(conf_path, params_path=None):
         ET.SubElement(layer, "{%s}desc" % SVG_NS).text = "\n".join(
             'qlinks "%s" = %s' % (n, ",".join(ks)) for n, ks in tab["qlinks"])
         for i, w in enumerate(tab["widgets"]):
+            if w["kind"] == "art" and ("w" in w or not w["file"].lower().endswith(".svg")):
+                # a placed or bitmap image: linked, its line (file= included) on the group
+                box = (w["x"], w["y"] - Y_OFF, w["w"], w["h"]) if "w" in w else (0, 0, W, H)
+                g = ET.SubElement(layer, "{%s}g" % SVG_NS, {LABEL: strip_geom(conf_line(w)), "id": "t%dw%d" % (t, i)})
+                ET.SubElement(g, "{%s}image" % SVG_NS, {"href": w["file"], "x": str(box[0]), "y": str(box[1]),
+                                                         "width": str(box[2]), "height": str(box[3])})
+                continue
             if w["kind"] == "art":   # the drawing itself, editable; the group's label keeps any when=
                 rest = {k: v for k, v in w.items() if k != "file"}
                 g = ET.SubElement(layer, "{%s}g" % SVG_NS, {LABEL: conf_line(rest), "id": "t%dw%d" % (t, i)})
@@ -275,7 +286,7 @@ def to_svg(conf_path, params_path=None):
                 continue
             if w["kind"].startswith("enum") and not w.get("options") and w.get("key") in opts:
                 w["options"] = opts[w["key"]]
-            tag, attrs = shape_for(w)
+            tag, attrs = shape_for(w, conf_dir)
             label = strip_geom(conf_line(w))
             if w["kind"] == "enum_h" and not w.get("options"):   # no option count to recompute sw from
                 label += " sw=%d" % (w.get("sw") or 117)
@@ -338,7 +349,7 @@ def geometry(el, m):
             cx, cy = apply(nm, float(node.get("cx", 0)), float(node.get("cy", 0)))
             r = float(node.get("r") or node.get("rx") or 0) * math.sqrt(abs(nm[0] * nm[3] - nm[1] * nm[2]))
             return ("circle", cx, cy, r)
-        if tag == "rect":
+        if tag in ("rect", "image"):
             x, y = float(node.get("x", 0)), float(node.get("y", 0))
             w, h = float(node.get("width", 0)), float(node.get("height", 0))
             pts = [apply(nm, px, py) for px, py in ((x, y), (x + w, y), (x, y + h), (x + w, y + h))]
@@ -347,7 +358,7 @@ def geometry(el, m):
     return None
 
 
-def element_to_line(label, geo):
+def element_to_line(label, geo, base_dir="."):
     toks = shlex.split(label)
     kind, attrs = toks[0], dict(t.split("=", 1) for t in toks[1:] if "=" in t)
     w = {"kind": kind, **attrs}
@@ -358,7 +369,7 @@ def element_to_line(label, geo):
         _, x, y, gw, gh = geo
         cx, cy = x + gw / 2, y + gh / 2
     Y = Y_OFF
-    if kind == "frame" or kind == "list":
+    if kind in ("frame", "list", "picture", "art"):
         w.update(x=round(x), y=round(y + Y), w=round(gw), h=round(gh))
         if kind == "list":
             rows, gap = int(w.get("rows", 4)), int(w.get("gap", 4))
@@ -367,7 +378,7 @@ def element_to_line(label, geo):
                 w[k] = int(w.get(k, {"rows": 4, "cols": 1, "gap": 4}[k]))
     elif kind == "knob":
         w.update(cx=round(cx), cy=round(cy + Y), r=max(12, round(gw / 2)))
-    elif kind in ("readout", "stepper", "slider_v", "slider_h", "menu", "popup"):
+    elif kind in ("readout", "stepper", "slider_v", "slider_h", "menu", "popup", "meter"):
         w.update(cx=round(cx), cy=round(cy + Y), w=round(gw), h=round(gh))
     elif kind == "enum_h":
         w.update(cx=round(cx), cy=round(cy + Y))
@@ -386,7 +397,7 @@ def element_to_line(label, geo):
     if "cx" in w and kind != "knob" and (kind != "enum_h" or w.get("options") or "sw" in w):
         # the anchor isn't always the shape's centre (odd sizes, multi-row selectors): place the
         # shape this anchor would draw, and shift the anchor by the difference
-        _, a = shape_for(w)
+        _, a = shape_for(w, base_dir)
         w["cx"] += round(cx - (a["x"] + a["width"] / 2))
         w["cy"] += round(cy - (a["y"] + a["height"] / 2))
     return conf_line(w)
@@ -433,10 +444,10 @@ def from_svg(svg_path, out_path=None):
                 cm = mul(m, parse_transform(ch.get("transform")))
                 l = ch.get(LABEL, "")
                 kind = l.split(" ")[0]
-                if kind in shadow_skin.CONTROL_KINDS + ("frame",):
+                if kind in shadow_skin.CONTROL_KINDS + ("frame", "picture") or (kind == "art" and "file=" in l):
                     geo = geometry(ch, cm)
                     if geo:
-                        lines.append(element_to_line(l, geo))
+                        lines.append(element_to_line(l, geo, out_dir))
                 elif kind == "art":
                     groups.append((l, cm, list(ch)))
                 elif ch.tag.endswith("}g") and not l:

@@ -10,33 +10,37 @@ const PX = { x: 0, y: 86, w: 1280, h: 628 };   // the plugin area, in layout coo
 
 // ---------------------------------------------------------------- widget kinds
 
-const CONTROLS = ["knob", "slider_v", "slider_h", "toggle", "button", "enum_h", "enum_v", "readout", "stepper", "list", "menu", "popup"];
+const CONTROLS = ["knob", "slider_v", "slider_h", "toggle", "button", "enum_h", "enum_v", "readout", "stepper", "list", "menu", "popup", "meter"];
 const PALETTE = [
   ["knob", "Knob"], ["slider_v", "V slider"], ["slider_h", "H slider"], ["toggle", "Toggle"], ["button", "Button"],
   ["enum_v", "Selector ↕"], ["enum_h", "Segments ↔"], ["popup", "Popup"], ["readout", "Readout"], ["stepper", "Stepper"],
-  ["list", "List"], ["menu", "Menu"], ["frame", "Frame"],
+  ["list", "List"], ["menu", "Menu"], ["frame", "Frame"], ["picture", "Picture"], ["meter", "Meter"],
 ];
 const TEMPLATE = {   // new widgets, centred on the plugin area (the fields of tools/skin_template.conf)
   knob: { r: 36 }, slider_v: { w: 40, h: 170 }, slider_h: { w: 200, h: 36 }, toggle: {}, button: {},
   enum_v: {}, enum_h: {}, readout: { w: 300, h: 40 }, popup: { w: 220, h: 40 }, stepper: { w: 300, h: 52 },
   menu: { w: 220, h: 40 }, list: { w: 600, h: 188, cols: 2, rows: 4, th: 44, gap: 4 }, frame: { w: 400, h: 300 },
+  picture: { w: 200, h: 120 }, meter: { w: 24, h: 120 },
 };
+const BOXED = ["frame", "list", "picture"];   // placed by their top-left corner (x=, y=); the rest by their centre
 // inspector fields per kind: [field, label, type]; types: n (int), on (optional int), s (text), key, opts, when, sel:<a,b>, color, file
 const GEOM = {
   frame: [["x", "x", "n"], ["y", "y", "n"], ["w", "width", "n"], ["h", "height", "n"]],
   list: [["x", "x", "n"], ["y", "y", "n"], ["w", "width", "n"], ["h", "height", "n"], ["cols", "columns", "n"], ["rows", "rows", "n"], ["th", "row height", "n"], ["gap", "gap", "n"]],
   knob: [["cx", "centre x", "n"], ["cy", "centre y", "n"], ["r", "radius", "n"]],
-  toggle: [["cx", "centre x", "n"], ["cy", "centre y", "n"]],
-  button: [["cx", "centre x", "n"], ["cy", "centre y", "n"]],
+  toggle: [["cx", "centre x", "n"], ["cy", "centre y", "n"], ["w", "image width", "on"], ["h", "image height", "on"]],
+  button: [["cx", "centre x", "n"], ["cy", "centre y", "n"], ["w", "image width", "on"], ["h", "image height", "on"]],
+  picture: [["x", "x", "n"], ["y", "y", "n"], ["w", "width", "n"], ["h", "height", "n"]],
   enum_v: [["cx", "centre x", "n"], ["cy", "centre y", "n"]],
   enum_h: [["cx", "centre x", "n"], ["cy", "centre y", "n"], ["sw", "segment width", "on"], ["rows", "rows", "on"]],
   popup: [["cx", "centre x", "n"], ["cy", "centre y", "n"], ["w", "width", "n"], ["h", "height", "n"], ["cols", "list columns", "on"]],
-  art: [],
+  art: [["x", "x", "on"], ["y", "y", "on"], ["w", "width", "on"], ["h", "height", "on"]],
 };
-for (const k of ["slider_v", "slider_h", "readout", "stepper", "menu"]) GEOM[k] = [["cx", "centre x", "n"], ["cy", "centre y", "n"], ["w", "width", "n"], ["h", "height", "n"]];
+for (const k of ["slider_v", "slider_h", "readout", "stepper", "menu", "meter"]) GEOM[k] = [["cx", "centre x", "n"], ["cy", "centre y", "n"], ["w", "width", "n"], ["h", "height", "n"]];
 const TEXT = {
   frame: [["title", "title", "s"]],
-  art: [["file", "SVG file", "file"]],
+  art: [["file", "image or SVG drawing", "file"], ["fit", "fit in its box", "sel:,cover,stretch"]],
+  picture: [["key", "parameter (one image per option)", "key"], ["fit", "fit in its box", "sel:,cover,stretch"]],
   button: [["label", "label", "s"], ["key", "parameter", "key"], ["color", "colour", "color"]],
   enum_h: [["label", "group label", "s"], ["key", "parameter", "key"], ["options", "options (comma separated; empty = the parameter's)", "opts"]],
   enum_v: [["label", "group label", "s"], ["key", "parameter", "key"], ["options", "options (comma separated; empty = the parameter's)", "opts"]],
@@ -47,7 +51,8 @@ const TEXT = {
             ["get", "text from parameter (optional)", "key"]],
   list: [["key", "row parameters (<key>_1 … <key>_N)", "s"]],
 };
-for (const k of ["knob", "slider_v", "slider_h", "toggle", "menu"]) TEXT[k] = [["label", "label", "s"], ["key", "parameter", "key"]];
+for (const k of ["knob", "slider_v", "slider_h", "toggle", "menu", "meter"]) TEXT[k] = [["label", "label", "s"], ["key", "parameter", "key"]];
+const LOOK_ATTRS = ["look", "img", "img_on", "base", "strip", "frames"];
 
 // ---------------------------------------------------------------- state
 
@@ -142,7 +147,12 @@ function trackSet(v) {
 function modeParams() {
   const m = new Map();
   for (const i of widgetIdx()) {
-    const wh = W(i).when;
+    const w = W(i);
+    if (w.kind === "picture" && w.key) {
+      if (!m.has(w.key)) m.set(w.key, new Set());
+      (w.files || "").split(",").forEach((_, n) => m.get(w.key).add(String(n)));
+    }
+    const wh = w.when;
     if (!wh) continue;
     const [k, o] = wh.split(":");
     if (!m.has(k)) m.set(k, new Set());
@@ -210,10 +220,11 @@ async function renderCanvas() {
     S.items[i] = it;
     const w = W(i);
     const vis = shownInMode(w) ? "" : S.view.modes ? " ui-dim" : " ui-hide";
-    const art = w.kind === "art" ? " ui-art" : "";
+    const art = !pickable(w) ? " ui-art" : "";
     const b = it.box;
-    const hit = b && w.kind !== "art" ? `<rect class="ui-hit" data-i="${i}" x="${b[0]}" y="${b[1]}" width="${b[2]}" height="${b[3]}"/>` : "";
-    wh += `<g class="ui-w${vis}${art}" data-i="${i}">${it.svg}${hit}</g>`;
+    const hit = b && pickable(w) ? `<rect class="ui-hit" data-i="${i}" x="${b[0]}" y="${b[1]}" width="${b[2]}" height="${b[3]}"/>` : "";
+    const svg = w.kind === "picture" ? (it.alts || [])[S.mode[w.key] || 0] || "" : it.svg;
+    wh += `<g class="ui-w${vis}${art}" data-i="${i}">${svg}${hit}</g>`;
     lh += `<g class="ui-w${vis}" data-i="${i}">${it.live}</g>`;
   }
   gw.innerHTML = wh;
@@ -264,7 +275,7 @@ function renderOverlay() {
   const bad = new Set(checks().filter(c => c.level === "error" && c.i !== undefined && c.tab === S.tab).map(c => c.i));
   for (const i of widgetIdx()) {
     const it = S.items[i], w = W(i);
-    if (!it || !it.box || w.kind === "art" || !shownInMode(w)) continue;
+    if (!it || !it.box || !pickable(w) || !shownInMode(w)) continue;
     const b = it.box;
     if (S.view.bounds) h += `<rect class="ui-bound" x="${b[0]}" y="${b[1]}" width="${b[2]}" height="${b[3]}"/>`;
     if (bad.has(i)) h += `<rect class="ui-bad" x="${b[0] - 3}" y="${b[1] - 3}" width="${b[2] + 6}" height="${b[3] + 6}"/>`;
@@ -295,7 +306,11 @@ function renderOverlay() {
     `${lines().filter(l => l.t === "w").length} widgets on this tab · drag to move, corner handle to resize, arrows nudge (Shift ×10)`;
 }
 
-const resizable = w => !["toggle", "button", "enum_v", "art"].includes(w.kind) && !(w.kind === "enum_h" && !w.sw && !w.options && !param(w.key));
+// a full-page background is picked in the layer list only (it would cover every click); a placed image is a widget
+const pickable = w => w.kind !== "art" || "w" in w;
+const hasLook = w => LOOK_ATTRS.some(a => a in w) || S.doc.head.some(l => l.trim().startsWith((S.doc.groups[w.kind] || "-") + "_"));
+const resizable = w => (["toggle", "button"].includes(w.kind) ? hasLook(w) || "w" in w : !["enum_v"].includes(w.kind) && pickable(w)) &&
+  !(w.kind === "enum_h" && !w.sw && !w.options && !param(w.key));
 
 // ---------------------------------------------------------------- tabs, modes, layers
 
@@ -350,7 +365,7 @@ function renderModes() {
 }
 
 function describe(w) {
-  return w.kind === "frame" ? w.title || "frame" : w.kind === "art" ? w.file : w.label || w.key || "";
+  return w.kind === "frame" ? w.title || "frame" : w.kind === "art" ? w.file : w.kind === "picture" ? w.key || "" : w.label || w.key || "";
 }
 
 function renderLayers() {
@@ -402,7 +417,7 @@ function setupCanvas() {
     const h = e.target.dataset && e.target.dataset.handle;
     if (h !== undefined) {
       const i = +h;
-      drag = { type: "resize", i, p0: p, w0: clone(W(i)), snap: snapshot(), last: null };
+      drag = { type: "resize", i, p0: p, w0: clone(W(i)), box: S.items[i] && S.items[i].box, snap: snapshot(), last: null };
     } else if (e.target.classList.contains("ui-hit")) {
       const i = +e.target.dataset.i;
       if (S.pick >= 0) { assignPick(i); return; }
@@ -427,7 +442,7 @@ function setupCanvas() {
       const b = S.items[S.sel[0]] && S.items[S.sel[0]].box;
       if (b) $("#status").textContent = `x ${b[0] + drag.dx}  y ${b[1] + drag.dy}  (Δ ${drag.dx}, ${drag.dy})`;
     } else if (drag.type === "resize") {
-      const w = resized(drag.w0, snapV(dx), snapV(dy));
+      const w = resized(drag.w0, snapV(dx), snapV(dy), drag.box);
       if (JSON.stringify(w) !== drag.last) {
         drag.last = JSON.stringify(w);
         lines()[drag.i].w = w;
@@ -455,7 +470,7 @@ function setupCanvas() {
       const [x, y, w, h] = d.rect;
       const inside = i => {
         const b = S.items[i] && S.items[i].box;
-        return b && W(i).kind !== "art" && shownInMode(W(i)) && b[0] >= x && b[1] >= y && b[0] + b[2] <= x + w && b[1] + b[3] <= y + h;
+        return b && pickable(W(i)) && shownInMode(W(i)) && b[0] >= x && b[1] >= y && b[0] + b[2] <= x + w && b[1] + b[3] <= y + h;
       };
       S.sel = [...new Set([...(d.add ? S.sel : []), ...widgetIdx().filter(inside)])];
       renderLayers(); renderOverlay();
@@ -467,11 +482,17 @@ function setupCanvas() {
 }
 
 // a resize by (dx, dy) of the bottom-right corner; the top-left stays put
-function resized(w0, dx, dy) {
+function resized(w0, dx, dy, box) {
   const w = clone(w0);
   const k = w.kind;
   if (k === "knob") w.r = Math.max(12, w0.r + Math.round((dx + dy) / 2));
-  else if (k === "frame" || k === "list") {
+  else if (["toggle", "button"].includes(k) && box) {   // an image look: w=/h= (from its drawn size when unset)
+    const bw = w0.w ?? box[2], bh = w0.h ?? box[3];
+    w.w = Math.max(8, bw + dx);
+    w.h = Math.max(8, bh + dy);
+    w.cx = w0.cx + Math.round((w.w - bw) / 2);
+    w.cy = w0.cy + Math.round((w.h - bh) / 2);
+  } else if (BOXED.includes(k) || k === "art") {
     w.w = Math.max(20, w0.w + dx);
     w.h = Math.max(20, w0.h + dy);
     if (k === "list") w.th = Math.max(10, Math.round((w.h - (w.rows - 1) * w.gap) / w.rows));
@@ -497,7 +518,7 @@ function setupKeys() {
     if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); e.shiftKey ? redo() : undo(); }
     else if (mod && e.key.toLowerCase() === "y") { e.preventDefault(); redo(); }
     else if (mod && e.key.toLowerCase() === "d") { e.preventDefault(); duplicate(); }
-    else if (mod && e.key.toLowerCase() === "a") { e.preventDefault(); S.sel = widgetIdx().filter(i => W(i).kind !== "art" && shownInMode(W(i))); renderLayers(); renderOverlay(); renderPanel(); }
+    else if (mod && e.key.toLowerCase() === "a") { e.preventDefault(); S.sel = widgetIdx().filter(i => pickable(W(i)) && shownInMode(W(i))); renderLayers(); renderOverlay(); renderPanel(); }
     else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); remove(); }
     else if (e.key === "Escape") { S.pick = -1; select(null); if (S.panel === "qlinks") renderPanel(); }
     else if (e.key.startsWith("Arrow") && S.sel.length) {
@@ -529,14 +550,16 @@ function addWidget(kind) {
   const t = TEMPLATE[kind];
   const w = { kind };
   const cx = 640, cy = 400;
-  if (kind === "frame" || kind === "list") Object.assign(w, { x: cx - t.w / 2, y: cy - t.h / 2 }, t);
+  if (BOXED.includes(kind)) Object.assign(w, { x: cx - t.w / 2, y: cy - t.h / 2 }, t);
   else Object.assign(w, { cx, cy }, t);
   if (kind === "frame") w.title = "FRAME";
   else {
     const used = usedKeys();
     const free = params().filter(p => !used.has(p.key) && !p.key.endsWith("__open"));
-    const p = free.find(p => p.hint === kind) || free.find(p => kind.startsWith("enum") ? p.options.length : !p.options.length) || free[0];
-    if (kind !== "list") w.label = p ? shortLabel(p.name, kind === "button" ? 7 : 12) : kind.toUpperCase().replace("_", " ");
+    const p = free.find(p => p.hint === kind) ||
+      free.find(p => kind.startsWith("enum") || kind === "picture" ? p.options.length : !p.options.length) || free[0];
+    if (kind === "picture") w.files = "";
+    if (!["list", "picture", "meter"].includes(kind)) w.label = p ? shortLabel(p.name, kind === "button" ? 7 : 12) : kind.toUpperCase().replace("_", " ");
     w.key = p ? p.key : "param_" + kind;
   }
   // the builder's field order: geometry first, then label, then key (conf_line writes it that way too)
@@ -588,7 +611,7 @@ function showPanel(p) {
 
 function renderPanel() {
   if (!S.doc) return;
-  ({ inspect: renderInspect, qlinks: renderQlinks, theme: renderTheme, css: renderCss, checks: renderChecks })[S.panel]();
+  ({ inspect: renderInspect, qlinks: renderQlinks, theme: renderTheme, css: renderCss, assets: renderAssets, checks: renderChecks })[S.panel]();
 }
 
 function field(label, input, cls = "") {
@@ -685,9 +708,8 @@ function renderInspect() {
       p.append(field(label, wrap));
       continue;
     } else if (type === "file") {
-      inp = el("select");
-      for (const f of S.doc.art) inp.append(el("option", { value: f, textContent: f, selected: w.file === f }));
-      if (!S.doc.art.includes(w.file)) inp.append(el("option", { value: w.file, textContent: w.file + " (missing)", selected: true }));
+      p.append(field(label, imagePicker(w.file, v => v && edit(() => (W(S.sel[0]).file = v)), { none: null })));
+      continue;
     } else {
       inp = el("input", { type: "text", value: type === "opts" ? (w.options || []).join(",") : w[k] ?? "" });
       if (type === "key") inp.setAttribute("list", keyList("dl-keys"));
@@ -701,6 +723,9 @@ function renderInspect() {
     p.append(field(label, inp));
     if (k === "key" && params().length && w.key && !param(w.key) && w.kind !== "list") p.append(el("p", { className: "ui-note ui-err" }, `“${w.key}” is not a parameter of this plugin.`));
   }
+  if (w.kind === "picture") renderPictureFiles(p, w);
+  renderLook(p, w, it);
+  if (w.kind === "art" && !("w" in w)) p.append(el("p", { className: "ui-note" }, "Fills the plugin area behind everything. Give it x, y, width and height to place it as a picture instead."));
   const whenIn = el("input", { type: "text", value: w.when || "", placeholder: "always shown" });
   whenIn.setAttribute("list", whenList());
   bindEdit(whenIn, x => { const v = x.value.trim(); if (v) W(S.sel[0]).when = v; else delete W(S.sel[0]).when; });
@@ -717,7 +742,9 @@ function renderInspect() {
   p.append(el("div", { className: "ui-row" },
     el("button", { textContent: "Duplicate", onclick: duplicate }), el("button", { textContent: "Delete", onclick: remove })));
   if (w.kind === "popup") p.append(el("p", { className: "ui-note" }, "Selected, a popup shows its open option list. gen_vst.py adds the hidden ", el("code", {}, w.key + "__open"), " parameter it needs."));
-  if (["toggle", "button", "enum_v"].includes(w.kind)) p.append(el("p", { className: "ui-note" }, "The renderer fixes this control's size; only its position is yours."));
+  if (w.kind === "enum_v" || (["toggle", "button"].includes(w.kind) && !hasLook(w)))
+    p.append(el("p", { className: "ui-note" }, "The renderer fixes this control's size; only its position is yours" + (w.kind === "enum_v" ? "." : " (an image look can be any size).")));
+  if (w.kind === "meter") p.append(el("p", { className: "ui-note" }, "Experimental: a display-only filmstrip. The engine has to set the parameter, and whether MPC redraws it live is still to be checked on a device."));
 }
 
 // the file's own line while the widget is as loaded, else the line the server will write
@@ -803,7 +830,7 @@ function tabControls() {
   const keys = [];
   for (const i of widgetIdx()) {
     const w = W(i);
-    if (!CONTROLS.includes(w.kind)) continue;
+    if (!CONTROLS.includes(w.kind) || w.kind === "meter") continue;
     if (w.kind === "list") { for (let n = 1; n <= w.cols * w.rows; n++) keys.push(`${w.key}_${n}`); continue; }
     keys.push(w.key);
   }
@@ -902,7 +929,16 @@ function renderTheme() {
     const reset = el("button", { textContent: "reset", disabled: !v, onclick: () => edit(() => headSet("theme_" + k, undefined)) });
     p.append(el("div", { className: "ui-color" }, c, lab, reset));
   }
-  const other = S.doc.head.filter(l => l.trim() && !/^\s*(theme_|style=|art_css=|qlinks_track)/.test(l));
+  const lookRe = /^\s*(knob|slider|toggle|button|seg|frame|popup|meter)_(look|img|img_on|base|strip|frames)\s*=/;
+  const lookLines = S.doc.head.filter(l => lookRe.test(l));
+  p.append(el("h3", {}, "Default looks"), el("p", { className: "ui-note" }, lookLines.length ? "Every control of that kind without its own look:" :
+    "None: controls are drawn by the renderer. Set a control's look, then “Use for every …” in its inspector."));
+  for (const l of lookLines) {
+    const k = l.split("=")[0].trim();
+    p.append(el("div", { className: "ui-color", style: "grid-template-columns:1fr auto" }, el("code", { className: "ui-set" }, l.trim()),
+      el("button", { textContent: "remove", onclick: () => edit(() => headSet(k, undefined)) })));
+  }
+  const other = S.doc.head.filter(l => l.trim() && !/^\s*(theme_|style=|art_css=|qlinks_track)/.test(l) && !lookRe.test(l));
   if (other.length) p.append(el("h3", {}, "Other top-level lines"), el("p", { className: "ui-note" }, "Kept as they are: ", ...other.map(l => el("code", {}, l.trim())), ""));
 }
 
@@ -1046,7 +1082,7 @@ function checks() {
     for (const [i, it] of ws) {
       const w = it.w, where = `${w.kind} ${describe(w)}`;
       if (w.kind === "art") continue;
-      const need = [];
+      const need = w.kind === "picture" && w.key ? [w.key] : [];
       if (CONTROLS.includes(w.kind)) {
         if (!w.key) { out.push({ level: "error", tab: t, i, msg: `${where}: no parameter (key=).` }); continue; }
         if (w.kind === "list") for (let n = 1; n <= (w.cols || 1) * (w.rows || 1); n++) need.push(`${w.key}_${n}`);
@@ -1067,9 +1103,17 @@ function checks() {
         else if (wp && !wp.options.map(x => String(x).toLowerCase()).includes(String(o).toLowerCase()) && !(/^\d+$/.test(o) && +o < wp.options.length))
           out.push({ level: "error", tab: t, i, msg: `${where}: when=${w.when}: no option “${o}”.` });
       }
+      if (w.kind === "picture") {
+        const n = (w.files || "").split(",").filter(f => f.trim()).length, wp = has && param(w.key);
+        if (!n) out.push({ level: "error", tab: t, i, msg: `${where}: no images yet (one per option).` });
+        else if (wp && n !== wp.options.length) out.push({ level: "warn", tab: t, i, msg: `${where}: ${n} images for ${wp.options.length} options.` });
+        if (has && (!wp || wp.options.length < 2)) out.push({ level: "error", tab: t, i, msg: `${where}: “${w.key}” is not an option parameter.` });
+      }
+      if (w.kind === "meter" && !w.strip && !headGet("meter_strip")) out.push({ level: "error", tab: t, i, msg: `${where}: needs its filmstrip (Look).` });
       if (t !== S.tab) continue;   // geometry checks need the rendered boxes: this tab only
       const b = S.items[i] && S.items[i].box;
       if (S.items[i] && S.items[i].error) out.push({ level: "error", tab: t, i, msg: `${where}: ${S.items[i].error}` });
+      if (S.items[i] && S.items[i].warn) out.push({ level: "error", tab: t, i, msg: `${where}: ${S.items[i].warn}` });
       if (b && (b[0] < 0 || b[1] < PX.y || b[0] + b[2] > PX.w || b[1] + b[3] > PX.y + PX.h)) out.push({ level: "warn", tab: t, i, msg: `${where} goes past the plugin area's edge.` });
     }
     if (t === S.tab) {   // overlapping controls shown at the same time
@@ -1133,19 +1177,236 @@ async function save() {
 // an upload with the name of a file already next to the layout replaces it (the first time, it's kept as .bak)
 const replaceOk = (name, have) => !have.includes(name) || confirm(`Replace ${name} next to the layout?`);
 
-async function importArt() {
-  const f = $("#art-file").files[0];
-  if (!f) return;
-  if (!replaceOk(f.name, S.doc.art)) return ($("#art-file").value = "");
-  try {
-    await api("/api/upload?name=" + encodeURIComponent(f.name), await f.arrayBuffer(), true);
-    if (!S.doc.art.includes(f.name)) S.doc.art.push(f.name);
-    S.cache.clear();
-    // art goes first: drawn behind the frames and controls
-    edit(() => { lines().splice(0, 0, { t: "w", w: { kind: "art", file: f.name }, raw: "" }); S.sel = [0]; });
-    toast("Added " + f.name + " (drawn by the browser renderer: vst.json \"art\": \"html\")");
-  } catch (e) { toast(e.message, true); }
-  $("#art-file").value = "";
+// ---------------------------------------------------------------- images (tools/skin_assets.py)
+
+function pickFiles(accept, multiple) {
+  return new Promise(res => {
+    const inp = el("input", { type: "file", accept, multiple: !!multiple });
+    inp.onchange = () => res([...inp.files]);
+    inp.click();
+  });
+}
+
+// uploads go into images/ next to the layout -> their layout-relative names
+async function uploadImages(files) {
+  const out = [];
+  for (const f of files) {
+    const name = "images/" + f.name.replace(/[\\/]/g, "_");
+    if (!replaceOk(name, S.doc.images.map(x => x.name))) continue;
+    try {
+      const r = await api("/api/upload?name=" + encodeURIComponent(name), await f.arrayBuffer(), true);
+      S.doc.images = S.doc.images.filter(x => x.name !== name).concat([{ name, w: r.size[0], h: r.size[1] }]);
+      out.push(name);
+    } catch (e) { toast(e.message, true); }
+  }
+  if (out.length) S.cache.clear();
+  return out;
+}
+
+const imgURL = n => "/files/" + n.split("/").map(encodeURIComponent).join("/");
+const imageInfo = n => S.doc.images.find(x => x.name === n);
+
+// a filmstrip's frame count as the builder counts it (skin_assets.strip_layout); aspect = frame height / width
+function stripFrames(n, frames, aspect = 1) {
+  const x = imageInfo(n);
+  if (frames) return +frames;
+  if (!x || !x.w) return 0;
+  return Math.max(1, x.h >= x.w ? Math.round(x.h / Math.max(1, x.w * aspect)) : Math.round(x.w * aspect / Math.max(1, x.h)));
+}
+
+function imagePicker(value, onpick, opts = {}) {
+  const sel = el("select", {});
+  if (opts.none !== null) sel.append(el("option", { value: "", textContent: opts.none || "(none)" }));
+  for (const x of S.doc.images) sel.append(el("option", { value: x.name, textContent: `${x.name}  ${x.w}×${x.h}` }));
+  if (value && !imageInfo(value)) sel.append(el("option", { value, textContent: value + " (missing)" }));
+  sel.value = value || "";
+  sel.onchange = () => onpick(sel.value);
+  const up = el("button", { textContent: "Upload…", onclick: async () => {
+    const [n] = await uploadImages(await pickFiles("image/*,.svg", false));
+    if (n) onpick(n);
+  } });
+  return el("div", { className: "ui-pick" }, value && imageInfo(value) ? el("img", { className: "ui-thumb", src: imgURL(value), alt: "" }) : null, sel, up);
+}
+
+async function backgroundImage() {
+  const [n] = await uploadImages(await pickFiles("image/*,.svg", false));
+  if (!n) return;
+  // a background goes first: drawn behind the frames and controls
+  edit(() => { lines().splice(0, 0, { t: "w", w: { kind: "art", file: n, fit: "cover" }, raw: "" }); S.sel = [0]; });
+  toast("Added " + n + " as the page background (browser renderer: vst.json \"art\": \"html\")");
+}
+
+// an image placed on the page at its own shape (a logo, a panel photo), after the last line: over the frames
+function placeImage(n) {
+  const x = imageInfo(n) || { w: 200, h: 120 };
+  const s = Math.min(1, 400 / Math.max(1, x.w), 300 / Math.max(1, x.h));
+  const w = { kind: "art", file: n, x: 640 - Math.round(x.w * s / 2), y: 400 - Math.round(x.h * s / 2), w: Math.round(x.w * s), h: Math.round(x.h * s) };
+  const lastW = widgetIdx().pop(), at = lastW === undefined ? lines().length : lastW + 1;
+  edit(() => { lines().splice(at, 0, { t: "w", w, raw: "" }); S.sel = [at]; });
+  if (S.panel !== "inspect") showPanel("inspect");
+}
+
+// ---------------------------------------------------------------- looks
+
+const LOOK_HELP = {
+  knob: { img: "turning image (drawn pointing up = the middle of the travel)", base: "still base under it (optional: a scale, a skirt)" },
+  slider: { img: "thumb (as wide as a vertical slider, as tall as a horizontal one)", base: "track (optional; stretched to the slider)" },
+  toggle: { img: "off image", img_on: "on image (optional: the off image brightened)" },
+  button: { img: "off image (the label is drawn on top)", img_on: "on image (optional)" },
+  seg: { img: "off image (each option; its name on top)", img_on: "selected image (optional)" },
+  frame: { img: "panel picture (stretched to the frame; the title on top)" },
+  popup: { img: "list panel picture (under the options)" },
+};
+
+function groupDefaults(g) {
+  const d = {};
+  for (const a of LOOK_ATTRS) { const v = headGet(g + "_" + a); if (v !== undefined) d[a] = v; }
+  return d;
+}
+
+function lookMode(src) { return src.look || (src.strip ? "strip" : src.img ? "image" : ""); }
+
+function describeLook(src) {
+  const m = lookMode(src);
+  return !m ? "drawn by the renderer" : m === "strip" ? "filmstrip " + src.strip : m === "image" ? "image " + src.img : m === "drawn" ? "drawn by the renderer" : "built-in " + m;
+}
+
+function setLook(ww, attrs) {
+  for (const a of LOOK_ATTRS) delete ww[a];
+  Object.assign(ww, attrs);
+}
+
+function renderLook(p, w, it) {
+  const g = S.doc.groups[w.kind];
+  if (!g) return;
+  const own = LOOK_ATTRS.some(a => a in w), defs = groupDefaults(g);
+  const mode = own ? lookMode(w) || "drawn" : "__default";
+  p.append(el("h3", {}, "Look"));
+  const strips = ["knob", "slider", "meter"].includes(g), images = g !== "meter";
+  const sel = el("select", {},
+    g !== "meter" || Object.keys(defs).length ? el("option", { value: "__default", textContent: "Layout default: " + describeLook(defs) }) : null,
+    g !== "meter" ? el("option", { value: "drawn", textContent: "Drawn by the renderer" }) : null,
+    ...(S.doc.looks[g] || []).map(n => el("option", { value: n, textContent: "Built-in: " + n })),
+    images ? el("option", { value: "image", textContent: ["toggle", "button", "seg"].includes(g) ? "Images (off / on)" : ["frame", "popup"].includes(g) ? "Panel picture" : "Image" }) : null,
+    strips ? el("option", { value: "strip", textContent: "Filmstrip" }) : null);
+  sel.value = g === "meter" && mode !== "__default" ? "strip" : mode;
+  sel.onchange = async () => {
+    const v = sel.value;
+    let file = "";
+    if (v === "image" || v === "strip") {
+      file = (v === "strip" ? S.doc.images.find(x => x.h >= 2 * x.w || x.w >= 2 * x.h) : S.doc.images[0] || null)?.name;
+      if (!file) [file] = await uploadImages(await pickFiles("image/*,.svg", false));
+      if (!file) return renderInspect();
+    }
+    edit(() => {
+      const ww = W(S.sel[0]);
+      if (v === "__default") setLook(ww, {});
+      else if (v === "image") setLook(ww, { img: file });
+      else if (v === "strip") setLook(ww, { strip: file });
+      else setLook(ww, { look: v });
+    });
+  };
+  p.append(field(g === "meter" ? "filmstrip (frames stacked down or across, lowest value first)" : "look", sel));
+  if (it && it.warn) p.append(el("p", { className: "ui-note ui-err" }, it.warn));
+  if (!own) {
+    if (!Object.keys(defs).length) p.append(el("p", { className: "ui-note" }, `Set one here, then “Use for every ${g}” to make it the layout's default.`));
+    return;
+  }
+  const help = LOOK_HELP[g] || {};
+  const put = (a, v) => edit(() => { const ww = W(S.sel[0]); if (v) ww[a] = v; else delete ww[a]; });
+  if (mode === "image") {
+    p.append(field(help.img || "image", imagePicker(w.img, v => v && put("img", v), { none: null })));
+    if (help.img_on) p.append(field(help.img_on, imagePicker(w.img_on, v => put("img_on", v))));
+    if (help.base) p.append(field(help.base, imagePicker(w.base, v => put("base", v))));
+  } else if (mode === "strip") {
+    p.append(field("filmstrip", imagePicker(w.strip, v => v && put("strip", v), { none: null })));
+    const aspect = g === "knob" ? 1 : (w.h || 1) / (w.w || 1), auto = stripFrames(w.strip, null, aspect);
+    const fr = el("input", { type: "number", value: w.frames ?? "", placeholder: auto ? `auto: ${auto}` : "auto" });
+    bindEdit(fr, x => { const ww = W(S.sel[0]); if (x.value === "") delete ww.frames; else ww.frames = Math.max(1, Math.round(+x.value)); });
+    p.append(field("frames (when the shape doesn't say)", fr));
+  } else if (g === "knob" && mode !== "drawn") {
+    p.append(field(help.base, imagePicker(w.base, v => put("base", v))));
+  }
+  p.append(el("div", { className: "ui-row" },
+    el("button", { textContent: `Use for every ${g}`, title: `Make this the layout's default look for ${g}s (top-level ${g}_… lines); lines with their own look keep it`,
+      onclick: () => edit(() => {
+        const ww = W(S.sel[0]);
+        for (const a of LOOK_ATTRS) headSet(g + "_" + a, undefined);
+        for (const a of LOOK_ATTRS) if (a in ww && ww[a] !== "") headSet(g + "_" + a, String(ww[a]));
+        setLook(ww, {});
+      }) }),
+    el("button", { textContent: "Layout default", onclick: () => edit(() => setLook(W(S.sel[0]), {})) })));
+}
+
+// a picture: one image per option of its parameter, in option order
+function renderPictureFiles(p, w) {
+  const pp = param(w.key), files = (w.files || "").split(",").map(f => f.trim());
+  const opts = pp && pp.options.length ? pp.options : files.map((_, n) => "option " + (n + 1));
+  p.append(el("h3", {}, "Images, one per option"));
+  const setFile = (n, v) => edit(() => {
+    const ww = W(S.sel[0]), fs = (ww.files || "").split(",").map(f => f.trim());
+    while (fs.length < opts.length) fs.push("");
+    fs[n] = v;
+    while (fs.length && !fs[fs.length - 1]) fs.pop();
+    ww.files = fs.join(",");
+  });
+  opts.forEach((o, n) => p.append(field(String(o), imagePicker(files[n], v => setFile(n, v)))));
+  if (!pp) p.append(el("p", { className: "ui-note" }, "Pick an option parameter above (with --params) to get one row per option."));
+  p.append(el("p", { className: "ui-note" }, "MPC switches them itself as the setting changes. Pick the option to preview in the mode bar above the canvas."));
+}
+
+// ---------------------------------------------------------------- assets
+
+function renderAssets() {
+  const p = $("#p-assets");
+  p.innerHTML = "";
+  p.append(el("p", { className: "ui-note" }, "Images next to the layout. Uploads go into ", el("code", {}, "images/"), ". Pick one, then choose what it's for. The skin build copies what the layout uses into the skin."),
+    el("div", { className: "ui-row" }, el("button", { className: "ui-primary", textContent: "Upload images…", onclick: async () => {
+      const got = await uploadImages(await pickFiles("image/*,.svg", true));
+      if (got.length) { S.asset = got[0]; toast(`Added ${got.length} image${got.length > 1 ? "s" : ""}`); renderAssets(); }
+    } })));
+  if (!S.doc.images.length) return p.append(el("p", { className: "ui-note" }, "No images yet."));
+  const grid = el("div", { className: "ui-assets" });
+  for (const x of S.doc.images) {
+    const tall = x.h >= 2 * x.w, wide = x.w >= 2 * x.h;
+    const card = el("div", { className: "ui-asset" + (S.asset === x.name ? " ui-on" : ""), title: x.name, onclick: () => { S.asset = x.name; renderAssets(); } },
+      el("div", { className: "ui-asset-img" }, el("img", { src: imgURL(x.name), alt: "", loading: "lazy" })),
+      el("div", { className: "ui-asset-name" }, x.name.split("/").pop()),
+      el("small", {}, `${x.w}×${x.h}` + (tall || wide ? ` · strip ×${stripFrames(x.name)}?` : "")));
+    grid.append(card);
+  }
+  p.append(grid);
+  if (!S.asset || !imageInfo(S.asset)) return;
+  const n = S.asset, box = el("div", { className: "ui-qset ui-on" }, el("div", { className: "ui-asset-name" }, n));
+  const act = (label, fn) => box.append(el("button", { className: "ui-wide", style: "margin-top:4px", textContent: label, onclick: fn }));
+  const one = S.sel.length === 1 ? W(S.sel[0]) : null, g = one && S.doc.groups[one.kind];
+  const use = (attrs, keep = []) => edit(() => {
+    const ww = W(S.sel[0]), kept = Object.fromEntries(keep.filter(a => a in ww).map(a => [a, ww[a]]));
+    setLook(ww, Object.assign(kept, attrs));
+  });
+  if (g === "knob") {
+    act("Knob: turning image", () => use({ img: n }, ["base"]));
+    act("Knob: filmstrip", () => use({ strip: n }));
+    act("Knob: still base", () => use({ base: n }, ["img", "look"]));
+  } else if (g === "slider") {
+    act("Slider: thumb", () => use({ img: n }, ["base"]));
+    act("Slider: track", () => use({ base: n }, ["img", "look"]));
+    act("Slider: filmstrip", () => use({ strip: n }));
+  } else if (g === "meter") act("Meter: filmstrip", () => use({ strip: n }));
+  else if (["toggle", "button", "seg"].includes(g)) {
+    act("Off image", () => use({ img: n }, ["img_on"]));
+    act("On image", () => use({ img_on: n }, ["img"]));
+  } else if (g === "frame" || g === "popup") act(g === "frame" ? "Frame: panel picture" : "Popup: list panel picture", () => use({ img: n }));
+  else if (one && one.kind === "picture") act("Picture: next option's image", () => edit(() => {
+    const ww = W(S.sel[0]); ww.files = [...(ww.files || "").split(",").map(f => f.trim()).filter(Boolean), n].join(",");
+  }));
+  else if (one && one.kind === "art") act("Use for this image", () => edit(() => (W(S.sel[0]).file = n)));
+  if (!one) box.append(el("p", { className: "ui-note" }, "Select a control to use it as that control's look."));
+  act("Place on the page", () => placeImage(n));
+  act("Page background", () => {
+    edit(() => { lines().splice(0, 0, { t: "w", w: { kind: "art", file: n, fit: "cover" }, raw: "" }); S.sel = [0]; });
+  });
+  p.append(box);
 }
 
 function fit() {
@@ -1246,7 +1507,7 @@ async function quit() {
 // ---------------------------------------------------------------- load / start
 
 function load(d) {
-  Object.assign(S, { doc: d, tab: 0, sel: [], undo: [], redo: [], items: [], themeKey: "", mode: {}, qset: 0, pick: -1,
+  Object.assign(S, { doc: d, tab: 0, sel: [], undo: [], redo: [], items: [], themeKey: "", mode: {}, qset: 0, pick: -1, asset: null,
                      css: { name: "", text: null, saved: null } });
   S.cache.clear();
   $$("[data-artcss]").forEach(e => e.remove());
@@ -1266,8 +1527,8 @@ function load(d) {
 async function main() {
   const pal = $("#palette");
   for (const [k, label] of PALETTE) pal.append(el("button", { textContent: label, title: "Add a " + k, onclick: () => addWidget(k) }));
-  $("#import-art").onclick = () => $("#art-file").click();
-  $("#art-file").onchange = importArt;
+  $("#import-art").onclick = backgroundImage;
+  $("#place-img").onclick = async () => { const [n] = await uploadImages(await pickFiles("image/*,.svg", false)); if (n) placeImage(n); };
   $("#undo").onclick = undo;
   $("#redo").onclick = redo;
   $("#save").onclick = save;
