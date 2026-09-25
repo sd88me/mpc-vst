@@ -409,6 +409,12 @@ chunk) and closes it only on an exact option value, so a Q-Link nudge (between o
 two-column list under the field, a pick closes it and shows the choice, a Q-Link turn steps the value with the
 list left open.
 
+**Rolled out (2026-09-25, offline-tested, not yet re-checked on a device):** `studio.py auto` picks `popup` for 7+
+options. Ports: Maze (LFO sync divisions), JV-880 (reverb type), Acid (scale, root, regen) and Euclidier (lane
+divisions, randomise lane); the last two have hand-written wrappers and use `wrapper/popup.h`. Not used where a
+list is filled at run time (Crate Digger's genre/style steppers): popup option text is baked into the artwork.
+The artwork font gained `#` (force-shadow fa456fc), so note names like C# show; it still has no brackets.
+
 ## Patching MPC's own picker: not practical (checked 2026-09-25)
 `/usr/bin/MPC` links JUCE statically and is stripped (no `.symtab`); of ~8000 exported dynamic symbols none
 names a menu/overlay/combo/parameter class (only ~92 JUCE-related, all typeinfo/vtables of unrelated
