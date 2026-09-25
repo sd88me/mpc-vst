@@ -47,7 +47,8 @@ studio's auto-layout for now.
 Without Docker: `./devtest.sh build` makes `build/xenia-devtest.tar`; then by hand:
 ```
 ssh root@<ip> 'mkdir -p /tmp/xenia-devtest/rom && tar -xf - -C /tmp/xenia-devtest' < xenia-devtest.tar
-ssh root@<ip> 'cat > /tmp/xenia-devtest/rom/xt.mid' < <your ROM or OS update file>
+ssh root@<ip> 'cat > /tmp/xenia-devtest/rom/rom1.bin' < rom1.bin
+ssh root@<ip> 'cat > /tmp/xenia-devtest/rom/rom2.bin' < rom2.bin   # only if you have a half-ROM pair
 ssh root@<ip> '/tmp/xenia-devtest/run.sh /tmp/xenia-devtest/rom; rm -rf /tmp/xenia-devtest'
 ```
 

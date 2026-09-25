@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Device suitability test, run BEFORE installing the plugin: nothing is installed, MPC keeps running and is not
 # restarted, and everything goes to /tmp/xenia-devtest on the device and is deleted afterwards.
-#   ./devtest.sh build                     build the armhf test binaries + build/xenia-devtest.tar (no device)
-#   ./devtest.sh <device-ip> [rom-file]    run it on the device (ROM from rom-file, else /sdcard/vst/xenia)
+#   ./devtest.sh build                        build the armhf test binaries + build/xenia-devtest.tar (no device)
+#   ./devtest.sh <device-ip> [rom-file ...]   run it on the device (ROM from the file(s), else /sdcard/vst/xenia;
+#                                              a half-ROM dump is two .bin files -- pass both)
 # Report: interpreter throughput (no ROM needed), then the firmware booted from your ROM and played at DSP
 # clocks 100/75/50 % with 0-10 held voices: speed (>= 1.0 = real time), level vs 100 % (voice loss), thread CPU.
 # It keeps two to three cores busy for a few minutes: don't run it during a session you care about.
@@ -43,13 +44,15 @@ RUN
 }
 
 if [ "${1:-}" = build ]; then build; exit 0; fi
-[ -n "${1:-}" ] || { sed -n '2,9p' "$0" >&2; exit 2; }
-ip="$1"; rom="${2:-}"
+[ -n "${1:-}" ] || { sed -n '2,10p' "$0" >&2; exit 2; }
+ip="$1"; shift
 [ -f "$tarball" ] || build
 ssh "root@$ip" 'rm -rf /tmp/xenia-devtest && mkdir -p /tmp/xenia-devtest/rom && tar -xf - -C /tmp/xenia-devtest' < "$tarball"
 romdir=/sdcard/vst/xenia
-if [ -n "$rom" ]; then
-  ssh "root@$ip" "cat > '/tmp/xenia-devtest/rom/$(basename "$rom")'" < "$rom"
+if [ "$#" -gt 0 ]; then
+  for rom in "$@"; do
+    ssh "root@$ip" "cat > '/tmp/xenia-devtest/rom/$(basename "$rom")'" < "$rom"
+  done
   romdir=/tmp/xenia-devtest/rom
 fi
 ssh "root@$ip" "/tmp/xenia-devtest/run.sh $romdir; rm -rf /tmp/xenia-devtest" | tee "$here/build/devtest-report.txt"
