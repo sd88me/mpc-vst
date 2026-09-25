@@ -522,3 +522,34 @@ writing a control-socket wrapper, and check an engine's data-folder convention u
 RK3288, 4x Cortex-A17 @ 1.8 GHz (governor `performance`), `isolcpus=2-3`. MPC runs `AudioWorker0-3` (SCHED_FIFO),
 one pinned per core, plus `Audio Processing` (prio 20). Plugins run on these workers, so tracks spread across
 cores. `tools/bench.sh` measures a plugin against the 2902 µs block (docs/BENCH.md).
+
+## Xenia (gearmulator's Microwave II/XT) port started: `ports/xenia/` (2026-09-25)
+First port of a gearmulator synth. Engine = gearmulator's own `synthLib::Plugin` + `xt::Device` behind
+`mpc_engine()`, on a worker thread that keeps a 4-block ring ahead; the audio thread only copies blocks out and
+plays silence (counted as xruns) when the emulator falls behind, so a too-slow emulator can't stall MPC. Builds
+for armhf and passes `test_port.sh` under ASan without a ROM; **not yet run on a device**. Findings so far:
+- **No DSP JIT on MPC OS.** dsp56300's JIT targets x86-64 and AArch64 only; MPC runs a 32-bit ARM process, so
+  the DSP56300 runs on the interpreter (`DSP56K_FORCE_INTERPRETER`). The JIT sources still have to compile
+  (the `DSP` owns a `Jit`); two small vendored patches make them build on 32-bit (see `ports/xenia/src/VENDORED.md`).
+- **The emulator is cycle-driven.** The firmware programs the DSP's PLL and audio frames are paced by emulated
+  cycles, so real time at 100 % needs the interpreter to sustain that clock on one core (gearmulator logs it at
+  boot: "Clock speed changed to: N Mhz"; the DSP56303 tops out at 100 MHz). The DSP Clock parameter (50-100 %)
+  trades polyphony for CPU.
+- **Interpreter throughput** (`ports/xenia/tools/interp_bench.cpp`, synth-like loop, no ROM needed): ~61 MIPS
+  = ~71 MHz of DSP clock on one core of a 2.8 GHz Xeon (the cloud build host). The same binary built for armhf
+  runs under QEMU (the DSP's MMU memory setup works in a 32-bit address space). The Cortex-A17 number is the
+  go/no-go and is not measured yet (`ports/xenia/bench.sh <ip>`); a guess from typical x86/A17 ratios for
+  branchy interpreter code is a few times lower, which would be short of a ~100 MHz clock even at 50 %. gearmulator's own history (its `doc/dsp_performance_history.md`) had the
+  2022 interpreter at 5.8 MIPS on a Cortex-A76, against 234-421 MIPS for the AArch64 JIT.
+- **Thread placement matters here more than for other ports.** The Force boots with `isolcpus=2-3` and MPC's
+  SCHED_FIFO `AudioWorker`s on every core (see "CPU layout"), so the emulator's three SCHED_OTHER threads
+  (worker, DSP56300, MC68331) share cores 0-1 with MPC's UI and are preempted by the audio workers there.
+- **Build:** the core is ~190 C++17 files; building it inside `arm32v7/gcc:12` under QEMU takes a long time the
+  first time (~20-45 min on 4 cores; incremental afterwards). A host cross compiler is much faster but Ubuntu 24.04's targets glibc
+  2.39, whose C++ headers redirect `strtol` & co. to `__isoc23_*` (GLIBC_2.38), which the 2.36 link in
+  build_port.sh rejects. So the core is built in the same image the plugin is linked in.
+- Skin: studio auto-layout for now (2 pages, filter type as a popup; offline preview checked). This port hit a
+  gen_vst bug, now fixed: with no `layout`, the auto-layout's popups got no hidden `__open` params.
+- If the A17 falls well short, options by effort: the DSP Clock parameter; a helper process on units with a
+  64-bit kernel (AArch64 JIT, audio over shared memory); gearmulator's DSP bridge (DSP on a networked computer);
+  an ARMv7 backend for the dsp56300 JIT.

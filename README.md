@@ -35,6 +35,7 @@ Ports built with it (each in its own repo) very much alpha drafts, not yet polis
 | [JV-880](https://github.com/sd88me/mpc-vst-jv880) | JV-880 (Mini-JV) port |
 | [Crate Digger](https://github.com/sd88me/mpc-vst-cratedigger) | Digs Discogs by genre/style/decade and streams records onto a track |
 | [Euclidier](https://github.com/sd88me/mpc-vst-euclidier) | 8-lane Euclidean MIDI note/CC sequencer |
+| [Xenia](ports/xenia) (in this repo for now, started) | Waldorf Microwave II/XT via gearmulator's emulator; real-time on a 32-bit MPC unproven |
 
 ## How it works
 
