@@ -75,8 +75,8 @@ for the pattern). This applies to every future port, not just ones that hit the 
 - [ ] Q-Links: 1–8 = knob bank 1, 9–16 = bank 2; nested pages via several `qlinks` lines.
 - [ ] Choice lists: `enum_h`/`enum_v` (all options on screen) or `popup` (a field; a tap opens a drawn list, a
       pick closes it). Not `menu`: MPC's native picker opens empty for a VST2. A `popup` adds a hidden
-      `<key>__open` param after the port's own (gen_vst.py), kept by `wrapper/vst2_wrap.c`; a hand-written
-      wrapper (e.g. force-acid's) needs the same `popup_of` handling or its lists won't close. `studio.py preview`
+      `<key>__open` param after the port's own (gen_vst.py), kept by `wrapper/vst2_wrap.c`. A hand-written
+      wrapper includes `wrapper/popup.h` (after params.h) and follows its usage note, or its lists won't close. `studio.py preview`
       writes a `_open` image per page with popups.
 
 ## 4. Device
