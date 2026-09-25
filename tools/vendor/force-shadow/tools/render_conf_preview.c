@@ -19,6 +19,9 @@
 #include <stdint.h>
 #include <math.h>
 #include "../src/font8x8.h"
+#define STB_TRUETYPE_IMPLEMENTATION
+#define STBTT_STATIC
+#include "stb_truetype.h"
 
 #define LAND_W 1280
 #define LAND_H 800
@@ -287,6 +290,114 @@ static void draw_text_c(int cx, int y, const char *s, float scale, uint32_t colo
     draw_text(cx - text_width(s, scale)/2, y, s, scale, color);
 }
 
+/* ---- text (real TTF/OTF, optional -- font_title=/font_label=.conf keys) ----
+ * Swaps the baked font8x8.h bitmap font for a real font on whichever text role
+ * a page opts into (frame titles vs. everything else still baked: buttons,
+ * enum group labels and their per-option segment text -- see NOTES.md/
+ * PORTING.md "Control names" entry for why knob/toggle labels aren't in that
+ * list any more, they're MPC's own native Name components on-device).
+ * Two independent fonts (not one): a titling face reads differently from a
+ * panel-label face, same as real hardware silkscreens use distinct faces for
+ * section titles vs. control captions. mpc-vst-plugins docs/NOTES.md has the
+ * worked example (Force Acid: font_title=Univers 53, font_label=a Roland-style
+ * panel face) and mpc-vst-plugins/docs/SKIN_STUDIO.md documents the two keys. */
+typedef struct { stbtt_fontinfo info; unsigned char *buf; int loaded; } ttf_font_t;
+static ttf_font_t FONT_TITLE, FONT_LABEL;
+
+static int ttf_load(ttf_font_t *f, const char *path) {
+    FILE *fp = fopen(path, "rb");
+    if (!fp) { fprintf(stderr, "font: cannot open %s\n", path); return 0; }
+    fseek(fp, 0, SEEK_END);
+    long sz = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    f->buf = malloc((size_t)sz);
+    if (fread(f->buf, 1, (size_t)sz, fp) != (size_t)sz) { fprintf(stderr, "font: short read %s\n", path); fclose(fp); return 0; }
+    fclose(fp);
+    if (!stbtt_InitFont(&f->info, f->buf, stbtt_GetFontOffsetForIndex(f->buf, 0))) {
+        fprintf(stderr, "font: not a font file: %s\n", path);
+        return 0;
+    }
+    f->loaded = 1;
+    return 1;
+}
+/* `scale` matches the font8x8 callers' own float scale (1.15/1.5/2/2.5...); px height is
+ * derived from the old bitmap cell (GLYPH_CELL=9) times a boost, since a real font's cap
+ * height reads smaller than a 9px-tall bitmap glyph at the same nominal "scale" -- tuned by
+ * eye against the baked font's on-canvas size, not a font-metrics-exact conversion. */
+#define TTF_PX(scale) ((int)(GLYPH_CELL * (scale) * 1.6f + 0.5f))
+/* Ink-bbox span, not the font's own hmtx advance sum: some legacy/decorative fonts
+ * (e.g. a 1992 FontMonger conversion) draw glyphs wider than their advance metrics claim,
+ * so sizing a button/box off the advance alone clips or overflows it. min_x0/max_x1 are
+ * relative to the string's own pen-start (x=0); the caller shifts by -min_x0 if it draws
+ * from this width's left edge (ttf_draw_text_c does, via ttf_draw_text's `x` already being
+ * the pen start, not a bbox-adjusted one -- see its own comment). */
+static int ttf_span(ttf_font_t *f, const char *s, float scale, int *min_x0_out) {
+    int px = TTF_PX(scale);
+    float fscale = stbtt_ScaleForPixelHeight(&f->info, (float)px);
+    int pen = 0, min_x0 = 0, max_x1 = 0;
+    int first = 1;
+    for (const char *p = s; *p; p++) {
+        int adv, lsb, x0, y0, x1, y1;
+        stbtt_GetCodepointHMetrics(&f->info, (unsigned char)*p, &adv, &lsb);
+        stbtt_GetCodepointBitmapBox(&f->info, (unsigned char)*p, fscale, fscale, &x0, &y0, &x1, &y1);
+        (void)y0; (void)y1;
+        if (first || pen + x0 < min_x0) min_x0 = pen + x0;
+        if (first || pen + x1 > max_x1) max_x1 = pen + x1;
+        first = 0;
+        pen += (int)(adv * fscale);
+        if (p[1]) pen += (int)(stbtt_GetCodepointKernAdvance(&f->info, (unsigned char)*p, (unsigned char)p[1]) * fscale);
+    }
+    if (min_x0_out) *min_x0_out = min_x0;
+    return max_x1 - min_x0;
+}
+static int ttf_text_width(ttf_font_t *f, const char *s, float scale) {
+    return ttf_span(f, s, scale, NULL);
+}
+/* (x, y) is the same top-left-of-cell convention draw_text() uses -- x is the visual left
+ * edge of the drawn ink (matches ttf_text_width's span), not the font's raw pen origin. */
+static void ttf_draw_text(ttf_font_t *f, int x, int y, const char *s, float scale, uint32_t color) {
+    int px = TTF_PX(scale);
+    float fscale = stbtt_ScaleForPixelHeight(&f->info, (float)px);
+    int ascent, min_x0;
+    stbtt_GetFontVMetrics(&f->info, &ascent, NULL, NULL);
+    ttf_span(f, s, scale, &min_x0);
+    int baseline = y + (int)(ascent * fscale);
+    int cx = x - min_x0;   /* shift so the leftmost ink pixel lands at x, not the font's pen origin */
+    for (const char *p = s; *p; p++) {
+        int adv, lsb, x0, y0, x1, y1;
+        stbtt_GetCodepointHMetrics(&f->info, (unsigned char)*p, &adv, &lsb);
+        stbtt_GetCodepointBitmapBox(&f->info, (unsigned char)*p, fscale, fscale, &x0, &y0, &x1, &y1);
+        int gw = x1 - x0, gh = y1 - y0;
+        if (gw > 0 && gh > 0) {
+            unsigned char *bmp = malloc((size_t)gw * (size_t)gh);
+            stbtt_MakeCodepointBitmap(&f->info, bmp, gw, gh, gw, fscale, fscale, (unsigned char)*p);
+            for (int row = 0; row < gh; row++)
+                for (int col = 0; col < gw; col++) {
+                    int a = bmp[row * gw + col];
+                    if (a > 0) put_px_blend(cx + x0 + col, baseline + y0 + row, color, a);
+                }
+            free(bmp);
+        }
+        cx += (int)(adv * fscale);
+        if (p[1]) cx += (int)(stbtt_GetCodepointKernAdvance(&f->info, (unsigned char)*p, (unsigned char)p[1]) * fscale);
+    }
+}
+static void ttf_draw_text_c(ttf_font_t *f, int cx, int y, const char *s, float scale, uint32_t color) {
+    ttf_draw_text(f, cx - ttf_text_width(f, s, scale) / 2, y, s, scale, color);
+}
+/* ---- title/label text: real font if loaded (font_title=/font_label=), else font8x8 ---- */
+static void title_text(int x, int y, const char *s, float scale, uint32_t color) {
+    if (FONT_TITLE.loaded) ttf_draw_text(&FONT_TITLE, x, y, s, scale, color);
+    else draw_text(x, y, s, scale, color);
+}
+static void label_text_c(int cx, int y, const char *s, float scale, uint32_t color) {
+    if (FONT_LABEL.loaded) ttf_draw_text_c(&FONT_LABEL, cx, y, s, scale, color);
+    else draw_text_c(cx, y, s, scale, color);
+}
+static int label_width(const char *s, float scale) {
+    return FONT_LABEL.loaded ? ttf_text_width(&FONT_LABEL, s, scale) : text_width(s, scale);
+}
+
 /* ---- knob pointer angle (libm ok here -- host tool only) ---- */
 static void knob_dot(int cx, int cy, int r, int pct, int *dx, int *dy) {
     double angle = (-135.0 + 270.0 * pct / 100.0) * M_PI / 180.0;
@@ -319,52 +430,53 @@ static void widget_toggle(int cx, int cy, const char *label, int on) {
  * (`color=` on a `button` line) -- one button (e.g. SEARCH) can stand
  * out from the page's usual button color without a second theme. */
 static void widget_button(int cx, int cy, const char *label, uint32_t color_override) {
-    int w = text_width(label, 1.15f) + 36, h = 39;   /* scale was 1.5f, see frame_box()'s comment */
+    int w = label_width(label, 1.15f) + 36, h = 39;   /* scale was 1.5f, see frame_box()'s comment */
     if (G_TD3) {
         w += 24; h = 48;
         uint32_t bg = color_override ? color_override : TD3_BTN_BG;
         fill_rr(cx - w/2 - 2, cy - h/2 - 2, w + 4, h + 4, 10, PLATE_LINE);
         fill_rr(cx - w/2, cy - h/2, w, h, 8, bg);
-        draw_text_c(cx, cy - 7, label, 1.15f, BTN_TEXT);
+        label_text_c(cx, cy - 7, label, 1.15f, BTN_TEXT);
         return;
     }
     fill_rect(cx - w/2, cy - h/2, w, h, color_override ? color_override : ACCENT);
-    draw_text_c(cx, cy - 5, label, 1.15f, 0xfdf3ea);
+    label_text_c(cx, cy - 5, label, 1.15f, 0xfdf3ea);
 }
 static void widget_enum_h(int cx, int cy, const char *label, const char **opts, int n, int active, int sw_override) {
     int seg_w = sw_override > 0 ? sw_override : 117, seg_h = 33, gap = 2;
-    draw_text_c(cx, cy - seg_h/2 - 22, label, 1.5f, INK);
+    label_text_c(cx, cy - seg_h/2 - 22, label, 1.5f, INK);
     int total = n * seg_w + (n-1)*gap;
     int x0 = cx - total/2;
     for (int i = 0; i < n; i++) {
         int x = x0 + i*(seg_w+gap);
         fill_rect(x, cy - seg_h/2, seg_w, seg_h, i == active ? SEG_ACTIVE : SEG_INACTIVE);
-        draw_text_c(x + seg_w/2, cy - seg_h/2 + seg_h/2 - 6, opts[i], 1.5f, i == active ? SEG_ACTIVE_TX : INK_DIM);
+        label_text_c(x + seg_w/2, cy - seg_h/2 + seg_h/2 - 6, opts[i], 1.5f, i == active ? SEG_ACTIVE_TX : INK_DIM);
     }
 }
 static void widget_enum_v(int cx, int cy, const char *label, const char **opts, int n, int active) {
     int seg_w = 135, seg_h = 30, gap = 2;
     int hit_hh = (n*(seg_h+gap))/2;
-    draw_text_c(cx, cy - hit_hh - 24, label, 1.5f, ACCENT_HI);
+    label_text_c(cx, cy - hit_hh - 24, label, 1.5f, ACCENT_HI);
     int y0 = cy - hit_hh;
     for (int i = 0; i < n; i++) {
         int y = y0 + i*(seg_h+gap);
         fill_rect(cx - seg_w/2, y, seg_w, seg_h, i == active ? SEG_ACTIVE : SEG_INACTIVE);
-        draw_text_c(cx, y + seg_h/2 - 6, opts[i], 1.5f, i == active ? SEG_ACTIVE_TX : INK_DIM);
+        label_text_c(cx, y + seg_h/2 - 6, opts[i], 1.5f, i == active ? SEG_ACTIVE_TX : INK_DIM);
     }
 }
-static void frame_box(int x, int y, int w, int h, const char *title) {
-    /* Title scale was 1.5f: the baked font (font8x8.h) has lowercase, but at
-     * 1.5x its fixed monospace cell (10px/char * scale) read as too wide once
-     * callers moved off all-caps text -- see mpc-vst-plugins docs/NOTES.md
-     * ("No draggable/graph widgets..." entry's neighbour) for where this was
-     * first noticed (an mpc-vst-plugins skin build, which #includes this file
-     * as its production asset renderer -- force_shadow.c's own on-device
-     * renderer is a separate, hand-ported copy and is untouched by this). */
+/* Border/fill only, no title text -- shared by frame_box() and frame_box_blank(). The blank
+ * variant is what mpc-vst-plugins' shadow_skin.py emits (`frameblank|x|y|w|h`) when a port asks
+ * for a real title font (SHADOW_TITLE_FONT/vst.json "title_font"): Python draws the title itself
+ * as a Pillow overlay onto the finished background PNG afterward (build()'s `title_overlays`),
+ * so the C side never draws that text at all in that case -- title_text()'s own font_title= key
+ * (below) is this file's OWN, independent way to do a real-font title, still live for a layout
+ * that sets font_title= directly and doesn't go through Python's overlay path; the two are
+ * mutually exclusive per-title by construction (Python picks frame|... vs frameblank|... per
+ * title), never both. */
+static void frame_border(int x, int y, int w, int h) {
     if (G_TD3) {
         fill_rr(x, y, w, h, 10, PLATE_LINE);
         fill_rr(x + 2, y + 2, w - 4, h - 4, 9, TD3_BOX);
-        draw_text(x + 20, y + 14, title, 1.15f, ACCENT);
         fill_rect(x + 18, y + 38, w - 36, 1, INK_FAINT);
         return;
     }
@@ -373,8 +485,23 @@ static void frame_box(int x, int y, int w, int h, const char *title) {
     fill_rect(x, y, 1, h, PLATE_LINE);
     fill_rect(x+w-1, y, 1, h, PLATE_LINE);
     fill_rect(x, y+h-1, w, 1, PLATE_LINE);
-    draw_text(x + 18, y + 14, title, 1.15f, ACCENT_HI);
     fill_rect(x + 18, y + 36, w - 36, 1, PLATE_LINE);
+}
+static void frame_box_blank(int x, int y, int w, int h) {
+    frame_border(x, y, w, h);
+}
+static void frame_box(int x, int y, int w, int h, const char *title) {
+    /* Title scale was 1.5f: the baked font (font8x8.h) has lowercase, but at
+     * 1.5x its fixed monospace cell (10px/char * scale) read as too wide once
+     * callers moved off all-caps text -- see mpc-vst-plugins docs/NOTES.md
+     * ("No draggable/graph widgets..." entry's neighbour) for where this was
+     * first noticed (an mpc-vst-plugins skin build, which #includes this file
+     * as its production asset renderer -- force_shadow.c's own on-device
+     * renderer is a separate, hand-ported copy and is untouched by this).
+     * Real font (font_title=): title_text(), else the baked font as before. */
+    frame_border(x, y, w, h);
+    if (G_TD3) title_text(x + 20, y + 14, title, 1.15f, ACCENT);
+    else title_text(x + 18, y + 14, title, 1.15f, ACCENT_HI);
 }
 
 /* ---- chrome: top bar + tab bar ---- */
@@ -617,6 +744,18 @@ static void load_conf(const char *path) {
         if (!strncmp(s, "display_name=", 13)) { kv_str(s, "display_name", g_display_name, sizeof(g_display_name)); continue; }
         if (!strncmp(s, "style=", 6)) { G_TD3 = !strcmp(s + 6, "td3"); G_LCD = !strcmp(s + 6, "lcd"); continue; }
         if (!strncmp(s, "topbar_style=", 13)) { G_DSP = !strcmp(s + 13, "display"); continue; }
+        if (!strncmp(s, "font_title=", 11) || !strncmp(s, "font_label=", 11)) {
+            /* Real font for frame titles (font_title=) / everything else still baked -- buttons,
+             * enum group labels and their per-option segment text (font_label=). Path is relative
+             * to the CWD shadow_art runs from (the port's vst/ dir -- shadow_skin.py copies the
+             * theme lines into a temp <skin>/.art/theme.conf, so resolving relative to *this*
+             * conf file's own directory would break; CWD-relative matches how shadow_art is
+             * actually invoked by tools/build_port.sh / a port's own build.sh). No key: falls back
+             * to the baked font8x8.h bitmap font, exactly as before this feature existed. */
+            ttf_font_t *slot = (s[5] == 't') ? &FONT_TITLE : &FONT_LABEL;
+            ttf_load(slot, s + 11);
+            continue;
+        }
         if (!strncmp(s, "theme_", 6)) {
             /* theme_<name>=RRGGBB (no '#') -- mirrors force_shadow.c's own
              * theme_ parsing (parse_shadow_page_conf()) field-for-field. */

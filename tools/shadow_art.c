@@ -47,15 +47,9 @@ static void crop(const char *path, int x, int y, int w, int h) {
     fclose(f);
 }
 
-static void frame_box_blank(int x, int y, int w, int h) {
-    /* frame_box() minus its baked title text (mirrors its non-TD3 branch; TD3 isn't used by any
-     * port yet). A real TrueType font draws the title afterward via PIL (shadow_skin.py). */
-    fill_rect(x, y, w, 1, PLATE_LINE);
-    fill_rect(x, y, 1, h, PLATE_LINE);
-    fill_rect(x + w - 1, y, 1, h, PLATE_LINE);
-    fill_rect(x, y + h - 1, w, 1, PLATE_LINE);
-    fill_rect(x + 18, y + 36, w - 36, 1, PLATE_LINE);
-}
+/* frame_box_blank() lives in render_conf_preview.c now (frame_box() minus its baked title text,
+ * sharing frame_border() with frame_box() so the TD3 style force-acid uses is handled too --
+ * this file's own stub only covered the non-TD3 branch and has been dropped in favour of it). */
 
 static void knob_body(int cx, int cy, int r, int pct) {
     /* widget_knob() minus its label/value text (those come from the skin). A dotted arc instead
