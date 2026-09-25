@@ -1,12 +1,16 @@
-# Xenia for MPC OS (work in progress)
+# Xenia for MPC OS (closed -- not viable on this hardware)
 
 A port of [gearmulator](https://github.com/dsp56300/gearmulator)'s **Xenia**, the Waldorf Microwave II/XT
 emulator (the original OS running on emulated DSP56300 + MC68331 chips), to a native VST2 instrument for Akai
 MPC OS standalone devices, built with this repo's wrapper and tools.
 
-**Status: started, not yet run on a device.** It builds for armhf and passes the offline host test without a
-ROM. The open question is CPU: MPC OS runs a 32-bit ARM process, and gearmulator's DSP JIT only exists for
-x86-64 and AArch64, so the DSP runs on the interpreter here. See "CPU" below and `docs/NOTES.md` (repo root).
+**Status: closed, 2026-09-25.** Builds for armhf, passes the offline host test, and booted the real XT
+firmware on a Force -- but the DSP56300 interpreter (the only option on MPC's 32-bit ARM process; gearmulator's
+JIT only targets x86-64 and AArch64) can't sustain the firmware's real-time clock even at the lowest DSP Clock
+setting, and every fallback checked (64-bit helper process, network DSP bridge, a new ARMv7 JIT backend) is
+closed off too, for this hardware. See "CPU" below and `docs/NOTES.md`'s Xenia entry (repo root) for the full
+trail. Left in the repo as a reference and in case a fallback's constraint changes later (e.g. an
+AArch64-capable Akai unit comes into scope).
 
 ## Layout
 
@@ -76,11 +80,17 @@ resampler run on others). gearmulator logs the programmed clock at boot ("Clock 
 |---|---|
 | x86-64 Xeon @ 2.8 GHz (cloud build host, one core) | ~61 MIPS = ~71 MHz of DSP clock |
 | 32-bit ARM under QEMU | runs (memory setup, interpreter); speed meaningless |
-| MPC / Force (Cortex-A17, 32-bit) | not measured yet: `./bench.sh <ip>` |
+| MPC / Force (Cortex-A17, 32-bit) | **13.6-13.8 MIPS = ~16 MHz of DSP clock** (measured 2026-09-25, `devtest.sh`) |
 
-If the device falls well short, the options are, in order of effort: the DSP Clock parameter; a helper
-process on units whose kernel is 64-bit (the AArch64 JIT, audio over shared memory); gearmulator's DSP bridge
-(the DSP runs on a computer on the network); an ARMv7 JIT backend for dsp56300.
+**Result, real firmware on the Force (2026-09-25):** Xenia's XT ROM runs its PLL at **81.9 MHz** at DSP Clock
+100 % -- about 5x the interpreter's ~16 MHz ceiling on this device. `xenia_probe`'s chord/clock sweep (0-10
+held voices at DSP Clock 100/75/50 %) never got close to real time: speed stayed at 0.12 (100 %), 0.14
+(75 %), 0.21 (50 %), against >= 1.0 needed. **Not viable in-process on this hardware, and no fallback closes
+the gap either:** a 64-bit helper process needs an AArch64-capable SoC, which this Cortex-A17/RK3288 Force is
+not (confirmed via `/proc/cpuinfo`, no kernel workaround possible); gearmulator's network DSP bridge works but
+wasn't wanted for this port; an ARMv7 JIT backend for dsp56300 turned out to need an AArch32 assembler built
+from scratch (asmjit has none), pushing it from weeks to a multi-month undertaking not justified by one port.
+Full trail in `docs/NOTES.md`'s Xenia entry and `docs/DSP56300.md`.
 
 ## Licence
 

@@ -523,10 +523,11 @@ RK3288, 4x Cortex-A17 @ 1.8 GHz (governor `performance`), `isolcpus=2-3`. MPC ru
 one pinned per core, plus `Audio Processing` (prio 20). Plugins run on these workers, so tracks spread across
 cores. `tools/bench.sh` measures a plugin against the 2902 µs block (docs/BENCH.md).
 
-## Xenia (gearmulator's Microwave II/XT) port started: `ports/xenia/` (2026-09-25)
-The generalised findings (vendoring recipe, the 32-bit ARM build patches, CPU budget, fallback options) are
-written up in `docs/DSP56300.md` for any future gearmulator/DSP56300 port -- read that first for a second one;
-this entry stays as the dated log of what happened on this specific port.
+## Xenia (gearmulator's Microwave II/XT) port: started and shelved, `ports/xenia/` (2026-09-25)
+**Closed: not viable on this hardware, all fallbacks ruled out.** See the bottom of this entry for the final
+verdict and why -- read that first if considering reopening this port. The generalised findings (vendoring
+recipe, the 32-bit ARM build patches, CPU budget, fallback options) are written up in `docs/DSP56300.md` for
+any future gearmulator/DSP56300 port; this entry stays as the dated log of what happened on this specific port.
 
 First port of a gearmulator synth. Engine = gearmulator's own `synthLib::Plugin` + `xt::Device` behind
 `mpc_engine()`, on a worker thread that keeps a 4-block ring ahead; the audio thread only copies blocks out and
@@ -563,11 +564,33 @@ for armhf and passes `test_port.sh` under ASan without a ROM; **not yet run on a
 
   Speed never gets close to 1.0 (real time) at any clock tested, down to 50 %; the interpreter is running at
   roughly 1/5 to 1/8 of what this firmware needs even at the lowest clock. This matches the ceiling implied by
-  `interp_bench`'s ~16 MHz on this device vs. the firmware's 82 MHz PLL setting. **Conclusion: in-process
-  interpreter emulation is not viable for Xenia on the Force's Cortex-A17** -- no DSP Clock or voice cap closes
-  a 5-8x gap. Next step is one of the fallbacks in `ports/xenia/README.md`'s CPU section / `docs/DSP56300.md`
-  (a 64-bit helper process using gearmulator's AArch64 JIT, or the network DSP bridge); the ARMv7 JIT backend
-  is out of proportion to what a single port justifies unless more DSP56300 ports are planned.
+  `interp_bench`'s ~16 MHz on this device vs. the firmware's 82 MHz PLL setting. In-process interpreter
+  emulation is not viable for Xenia on the Force's Cortex-A17 -- no DSP Clock or voice cap closes a 5-8x gap.
+- **All fallbacks checked and ruled out (2026-09-25) -- port closed.**
+  - *64-bit helper process:* dead on this hardware. Confirmed live on the device (`ssh root@<Force> 'cat
+    /proc/cpuinfo'`): `CPU architecture: 7`, no AArch64 `Features`. The Force's SoC is Rockchip RK3288 /
+    Cortex-A17, which is ARMv7-A only -- it has no AArch64 execution state at all, at any kernel/userspace
+    config. gearmulator's AArch64 JIT can never run on this chip. (Worth re-checking per Akai model if a
+    different MPC unit with an ARMv8-capable SoC is ever in scope -- this rules out only the Force tested
+    here.)
+  - *gearmulator's network DSP bridge:* viable in principle (moves the DSP off-device entirely) but declined
+    by the user -- needs a second always-on machine and adds network latency/complexity out of proportion to
+    this port.
+  - *A 32-bit ARM (AArch32/Thumb-2) JIT backend for dsp56300:* scoped and found to be substantially bigger
+    than first estimated. Not just a ~1,900-line port of the `jitops_*_aarch64.cpp` files (the AArch64
+    architecture-specific opcode backends) -- **asmjit, the assembler library the JIT emits machine code
+    through, has no AArch32/Thumb-2 backend at all** (`asmjit/src/asmjit/arm/` only has `a64*` files; no
+    `a32*` equivalent). The AArch64 assembler + instruction DB + register allocator alone (`a64assembler.cpp`
+    5,111 lines, `a64instdb.cpp` 2,657, `a64rapass.cpp` 852 -- ~9,000 lines) is the piece that doesn't exist
+    for ARMv7 and would have to be built first, before any opcode-backend porting. Realistically a multi-month
+    project with real correctness risk (silently-wrong instruction encoding, not a compile error), and while
+    it would amortise across every DSP56300 port (Virus/OsTIrus, microQ/Vavra, Nord Lead 2x, JP-8000 all share
+    the same JIT core, not just Xenia) it was judged too large to take on for this.
+  - **Conclusion: Xenia is not viable as an in-process MPC OS plugin on the Force.** No further work planned
+    unless a fallback's constraint changes (e.g. an ARMv8-capable Akai unit comes into scope, reopening the
+    64-bit helper option, or a future need makes the shared JIT backend worth the investment across multiple
+    ports). `ports/xenia/` stays in the repo as-is (builds, offline-tests, and the devtest harness all work)
+    as a reference and in case those constraints change.
 - **Thread placement matters here more than for other ports.** The Force boots with `isolcpus=2-3` and MPC's
   SCHED_FIFO `AudioWorker`s on every core (see "CPU layout"), so the emulator's three SCHED_OTHER threads
   (worker, DSP56300, MC68331) share cores 0-1 with MPC's UI and are preempted by the audio workers there.
