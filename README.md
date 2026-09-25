@@ -24,12 +24,13 @@ Working today:
   its Q-Link map, test it on a PC, check its CPU cost on the device, and package it as a shareable zip with an
   installer.
 
-Ports built with it (each in its own repo):
+Ports built with it (each in its own repo) very much alpha drafts, not yet polished:
 
 | Plugin | What it is |
 |---|---|
 | [Maze Voice](https://github.com/sd88me/mpc-vst-maze) | Labyrinth-style thru-zero FM / wavefolder / filter synth voice |
 | [DX7](https://github.com/sd88me/mpc-vst-dx7) | 6-operator FM synth (the Dexed engine) |
+| [JV-880](https://github.com/sd88me/mpc-vst-jv880) | JV-880 (Mini-JV) port |
 | [Crate Digger](https://github.com/sd88me/mpc-vst-cratedigger) | Digs Discogs by genre/style/decade and streams records onto a track |
 | [Euclidier](https://github.com/sd88me/mpc-vst-euclidier) | 8-lane Euclidean MIDI note/CC sequencer |
 
