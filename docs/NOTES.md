@@ -524,6 +524,10 @@ one pinned per core, plus `Audio Processing` (prio 20). Plugins run on these wor
 cores. `tools/bench.sh` measures a plugin against the 2902 µs block (docs/BENCH.md).
 
 ## Xenia (gearmulator's Microwave II/XT) port started: `ports/xenia/` (2026-09-25)
+The generalised findings (vendoring recipe, the 32-bit ARM build patches, CPU budget, fallback options) are
+written up in `docs/DSP56300.md` for any future gearmulator/DSP56300 port -- read that first for a second one;
+this entry stays as the dated log of what happened on this specific port.
+
 First port of a gearmulator synth. Engine = gearmulator's own `synthLib::Plugin` + `xt::Device` behind
 `mpc_engine()`, on a worker thread that keeps a 4-block ring ahead; the audio thread only copies blocks out and
 plays silence (counted as xruns) when the emulator falls behind, so a too-slow emulator can't stall MPC. Builds

@@ -3,7 +3,11 @@
 ## 0. Classify it
 - **Block-rendering engine** (a synth/effect core): implement `mpc_engine()` (`wrapper/engine.h`) and wrap with
   `wrapper/vst2_wrap.c`; parameters come from a `params.json` (`tools/params.py`). An engine already written for
-  another host plugs in through its adapter (`adapters/`, e.g. `adapters/schwung/` for Maze Voice, JV-880).
+  another host plugs in through its adapter (`adapters/`, e.g. `adapters/schwung/` for Maze Voice, JV-880). A
+  [gearmulator](https://github.com/dsp56300/gearmulator) engine (Virus, microQ, Microwave II/XT, Nord Lead 2x,
+  JP-8000 -- any DSP56300-based hardware synth) is its own case: vendor it directly (no adapter) and read
+  `docs/DSP56300.md` first -- it has the 32-bit ARM build patches, the CPU-budget question every one of these
+  hits, and a device suitability test to run before committing to a full port.
 - **Engine with host-side glue** (control-socket keys that aren't DSP params, dynamic lists): write a port-specific
   wrapper on the same ABI (see the crate digger port) with virtual parameters for the glue. First check whether the
   same engine has an in-process build that fits the first category: an engine designed as an always-running
