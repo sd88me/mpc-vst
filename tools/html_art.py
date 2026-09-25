@@ -14,6 +14,8 @@ Extra commands, which only this renderer has (looks and images: tools/skin_asset
   lsstrip|out|w|h|frames|vert|LOOK     a slider filmstrip with a look
   ltog|x|y|on|w|h|LOOK                 a toggle with a look;  lbtn|x|y|w|h|on|label|LOOK   a button
   lseg|x|y|w|h|on|ink|label|LOOK       an option segment over an image
+  limg|path|w|h|fit                    one alpha-preserving image, at (0,0)..(w,h) (an EXPERIMENTAL native
+                                        Meter's inactiveImage/peakImage/rmsImage; shadow_skin.py crops it per use)
 
 Controls (knob and slider strips, toggles, buttons, option segments, tiles: a canvas holding just one of them)
 come out with a transparent background, so they sit on any artwork; they are written as RGBA PNG data under the
@@ -438,6 +440,8 @@ class Art:
             self.ops.append(o + "</g>")
         elif op == "svg" and n == 6:
             self.svg_file(a[1], I(2), I(3), I(4), I(5))
+        elif op == "limg" and n == 5:
+            self.ops.append(self.image(a[1], 0, 0, I(2), I(3), a[4]))
         elif op == "iframe" and n == 7:
             x, y = I(1), I(2)
             o = self.image(a[6], x, y, I(3), I(4), "stretch")
@@ -463,7 +467,7 @@ class Art:
                               [self.slider_frame(0, 0, w, h, vert, k / (frames - 1), look) for k in range(frames)]))
         elif op == "crop" and n == 6:
             lone = self.kinds[:1] == ["clear"] and len(self.kinds) == 2 and self.kinds[1] in (
-                "pill", "button", "seg", "tile", "knob", "ltog", "lbtn", "lseg")
+                "pill", "button", "seg", "tile", "knob", "ltog", "lbtn", "lseg", "limg")
             svg = "".join(self.ops[1:] if lone else self.ops)
             self.jobs.append(("crop", svg, a[1], I(2), I(3), I(4), I(5), lone))
         elif op == "strip" and n == 5:

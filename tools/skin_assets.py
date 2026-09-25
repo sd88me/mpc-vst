@@ -10,6 +10,11 @@ A control's look comes from its layout line, else from a top-level default for i
     frame    img=panel.png                                     (a panel picture instead of the drawn border)
     popup    img=list.png                                      (the open list's panel, under the options)
     meter    strip=meter.png [frames=N]                        (a display-only filmstrip: see shadow_skin.py)
+    meter    look=native img=bg.png [peak=fill.png] [rms=fill2.png] [direction=up|down|right] [invert=1]
+                                                       (EXPERIMENTAL, unverified: a real native Meter component
+                                                        instead of the filmstrip fake above; see docs/ROADMAP.md
+                                                        "A native Meter component". direction/invert are read
+                                                        straight off the widget, not part of the look.)
 
     top level: <group>_<attr>=value, e.g. knob_look=moog, slider_img=cap.png, toggle_img=led_off.png
     (groups: knob, slider, toggle, button, seg, frame, popup, meter). A line that sets any look attribute ignores the defaults;
@@ -19,9 +24,9 @@ img is the moving part: a knob image turns through the knob's 270 degrees (drawn
 travel), a slider image is the thumb (as wide as a vertical slider, as tall as a horizontal one). base stays still
 under it (a knob's scale or skirt; a slider's track, stretched to the slider). strip is a ready filmstrip, frames
 stacked down (or across, for a wide image), minimum at the top/left; the frame count comes from the image shape
-unless frames= says. On/off images: img is off, img_on is on (without it, img brightened). Paths are relative to
-the layout. Images: .png .jpg .jpeg .webp .gif .svg. Looks need the browser renderer ("art": "html").
-Standard library only.
+unless frames= says. On/off images: img is off, img_on is on (without it, img brightened). peak/rms are a native
+meter's own overlay images (see above). Paths are relative to the layout. Images: .png .jpg .jpeg .webp .gif .svg.
+Looks need the browser renderer ("art": "html"). Standard library only.
 """
 import hashlib
 import json
@@ -32,12 +37,13 @@ import struct
 IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg")
 MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif",
         ".svg": "image/svg+xml"}
-ATTRS = ("look", "img", "img_on", "base", "strip", "frames")
-FILE_ATTRS = ("img", "img_on", "base", "strip")
+ATTRS = ("look", "img", "img_on", "base", "strip", "frames", "peak", "rms")
+FILE_ATTRS = ("img", "img_on", "base", "strip", "peak", "rms")
 GROUP = {"knob": "knob", "slider_v": "slider", "slider_h": "slider", "toggle": "toggle", "button": "button",
          "enum_h": "seg", "enum_v": "seg", "frame": "frame", "popup": "popup", "meter": "meter"}
 LOOKS = {"knob": ("moog", "chicken", "metal", "cap"), "slider": ("fader",), "toggle": ("led", "switch"),
-         "button": (), "seg": (), "frame": (), "popup": (), "meter": ()}
+         "button": (), "seg": (), "frame": (), "popup": (),
+         "meter": ("native",)}   # EXPERIMENTAL: a real Meter component instead of the filmstrip fake
 DEFAULT_RE = re.compile(r"(%s)_(%s)$" % ("|".join(LOOKS), "|".join(ATTRS)))
 TOGGLE_SIZE = {"led": (30, 30), "switch": (34, 50)}
 
@@ -136,8 +142,10 @@ def look_of(w, defs, base_dir="."):
 def check(w, look):
     """Why this look can't be built, or None."""
     g = GROUP[w["kind"]]
-    if g == "meter" and not look.get("strip"):
-        return "a meter needs strip= (its filmstrip)"
+    if g == "meter" and look.get("look") == "native" and not (look.get("img") or look.get("peak") or look.get("rms")):
+        return "look=native needs img= (background), peak= or rms= (experimental: see docs/ROADMAP.md)"
+    if g == "meter" and look.get("look") != "native" and not look.get("strip"):
+        return "a meter needs strip= (its filmstrip), or look=native (experimental: see docs/ROADMAP.md)"
     if g in ("frame", "popup") and not look.get("img"):
         return "%s: only img= (a panel picture)" % w["kind"]
     if look.get("look") and look["look"] not in LOOKS[g]:
