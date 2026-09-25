@@ -149,7 +149,8 @@ Parameter entries feeding `gen_vst.py` (`tools/params.py` format) can carry:
 
 ## Skin studio (layout design)
 `tools/studio.py`: `auto` (params → first-pass layout.conf), `to-svg` / `from-svg` (Inkscape round trip; tabs are layers,
-controls are labelled groups, Q-Links in layer descriptions), `preview` (built skin → PNGs). Read docs/SKIN_STUDIO.md.
+controls are labelled groups, Q-Links in layer descriptions), `serve` (browser editor for a layout.conf: drag/resize,
+inspector, Q-Links, theme, art_css; `tools/studio_web.py`), `preview` (built skin → PNGs). Read docs/SKIN_STUDIO.md.
 Always `preview` before deploying. Enum `options=` are optional in layouts (they default to the parameter's own).
 
 ## CPU check and release

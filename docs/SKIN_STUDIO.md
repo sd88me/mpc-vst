@@ -6,11 +6,14 @@ skin (`TUI.json`, Q-Links, artwork). Use any step on its own or chain them:
 
 ```
 params ──auto──► layout.conf ──to-svg──► layout.svg ──(Inkscape)──► from-svg ──► layout.conf ──► skin ──preview──► PNGs
+                     ▲ │
+                     └─┴── serve: edit it in the browser
 ```
 
 | Step | Command | Use it when |
 |---|---|---|
 | Auto-layout | `tools/studio.py auto params.json -o layout.conf` | You want a working first page in seconds |
+| Browser editor | `tools/studio.py serve layout.conf --params params.json` | You want to lay out, restyle and check it by hand |
 | To SVG | `tools/studio.py to-svg layout.conf -o layout.svg --params params.json` | You want to rearrange it visually |
 | From SVG | `tools/studio.py from-svg layout.svg -o layout.conf` | You've edited the SVG |
 | Build skin | the port's gen script (`shadow_skin.write_skin(...)`) | Always last |
@@ -31,6 +34,39 @@ The tools need Python 3; the skin build and preview also need Pillow (the ports 
   Q-Link turn steps the value and leaves it open. Swap any `enum_h`/`enum_v` line for
   `popup cx= cy= w= h= key=<param>` by hand when an option list takes too much room.
 - Labels are shortened to fit (an `LFO1 > ` prefix is dropped, since the frame title already says it).
+
+## Browser editor
+`tools/studio.py serve layout.conf --params params.json` and open http://127.0.0.1:8765/. The editor needs Python 3 only
+(no Docker, Pillow or Chromium); any browser will do. A layout that doesn't exist yet starts empty. To try it, copy
+`tools/skin_template.conf` somewhere and open it with `--params tools/skin_template.params.json`.
+
+- **The canvas is the skin.** Each widget is drawn with the browser renderer's own SVG and stylesheets
+  (`tools/html_art.py`, `default.css`, the layout's `art_css=`), so it looks like a `"art": "html"` build. MPC's own text
+  (names, values, list rows) is drawn on top in Titillium Web where the device puts it (**Live text**). A skin built with
+  the default renderer (shadow_art) has the same geometry but its bitmap font; `preview` shows that exactly.
+- **Layout:** drag to move (Shift locks an axis), drag the corner handle to resize (knob radius, box size, segment
+  width), arrows nudge by 1 (Shift: 10), drag across empty canvas to select several, then align or spread them.
+  Toggles, buttons and vertical selectors have renderer-fixed sizes, so they only move. **Slots** shows the
+  auto-layout's 8 × 2 grid.
+- **Inspector:** every field of the selected line, a parameter picker, `when=` with the parameter's options, and the
+  whole layout line to edit by hand (anything the fields don't cover).
+- **Tabs and layers:** add, rename (double-click), reorder, duplicate or delete tabs; reorder lines, duplicate
+  (Ctrl+D), delete. Frames and art are drawn behind the controls, as in the built skin.
+- **Modes:** a tab with `when=` lines gets a mode bar; pick an option to see that mode (**Other modes** dims the rest).
+- **Q-Links:** one card per `qlinks` set (sub-page), 16 slots in the two banks. Click a slot, then a control on the
+  canvas. The canvas numbers the selected set's controls. `qlinks_track` is below.
+- **Theme:** `style=` and a colour picker per `theme_*` colour, shown live.
+- **Style:** creates or edits the `art_css=` stylesheet with a live preview: sliders for the renderer's text sizes,
+  corner radius and sheen, font upload (`@font-face` added for you) and a font picker for labels and frame titles.
+  Fonts only change baked text; MPC draws names and values in its own fonts (docs/NOTES.md).
+- **Import SVG art:** uploads a drawing and adds an `art file=` line (drawn by the browser renderer).
+- **Checks:** unknown parameters, option counts that differ from the parameter, bad `when=`, controls overlapping or
+  past the plugin area's edge, broken lines, Q-Link sets over 16. Click one to select the widget.
+- **Saving** (Ctrl+S) writes the layout as `layout.conf.new`, then renames it over the old one; the first save keeps the
+  original as `layout.conf.bak`. Lines you didn't change are written back exactly as they were, comments included;
+  a changed line is rewritten in `from-svg`'s format. Undo/redo cover every edit.
+
+The server listens on 127.0.0.1 only (`--host` to change it) and reads and writes files only in the layout's folder.
 
 ## Inkscape (or Penpot) round trip
 - Open `layout.svg` in Inkscape. Each tab is a **layer** (`tab <NAME>`); only the first is visible,
@@ -88,7 +124,5 @@ MPC reads two maps from the skin's `Q-Links.json`:
   top-level `qlinks_track = key,...` line (same ordering); without it, page 1's set is used.
 
 ## Coming next
-Tracked in [ROADMAP.md](ROADMAP.md) ("Skin controls" and "Porting and tooling"), including:
-- Background artwork from the SVG: anything you draw in Inkscape becomes the page's background image.
-- Browser-rendered widgets (HTML/CSS/SVG in headless Chromium) instead of the Force Shadow renderer: any
-  font, knob style, gradient or shadow, with the same layout files.
+Tracked in [ROADMAP.md](ROADMAP.md) ("Skin controls" and "Porting and tooling"), including a build-and-preview
+button in the browser editor.

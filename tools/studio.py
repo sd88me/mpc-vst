@@ -5,6 +5,7 @@
     studio.py to-svg   layout.conf -o layout.svg               layout -> editable SVG (Inkscape/Penpot)
     studio.py from-svg layout.svg -o layout.conf               edited SVG -> layout
     studio.py preview  SKIN_DIR -o out_%d.png                  built skin -> one PNG per page
+    studio.py serve    layout.conf [--params PARAMS]           edit the layout in the browser (studio_web.py)
 
 PARAMS is a port's parameter file (tools/params.py; its "sections" become frames), or an
 adapter's source (adapters/). The layout is the shadow_page.conf-style file that
@@ -556,7 +557,13 @@ def main():
     s.add_argument("--params", help="the port's parameter file, to fill in omitted option lists")
     f = sub.add_parser("from-svg"); f.add_argument("svg"); f.add_argument("-o", required=True)
     p = sub.add_parser("preview"); p.add_argument("skin"); p.add_argument("-o", required=True)
+    w = sub.add_parser("serve", help="edit a layout in the browser (tools/studio_web.py)"); w.add_argument("conf")
+    w.add_argument("--params", help="the port's parameter file: key pickers, option lists and checks")
+    w.add_argument("--host", default="127.0.0.1"); w.add_argument("--port", type=int, default=8765)
     args = ap.parse_args()
+    if args.cmd == "serve":
+        import studio_web
+        return studio_web.serve(args.conf, args.params, args.host, args.port)
     if args.cmd == "auto":
         params, sections = load_params(args.params)
         open(args.o, "w").write(auto_layout(params, sections))

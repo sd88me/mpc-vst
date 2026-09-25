@@ -132,7 +132,8 @@ What's next is in [docs/ROADMAP.md](docs/ROADMAP.md).
 - `tools/html_art.py` + `tools/html_art/`: the optional browser renderer for skin artwork (`"art": "html"`):
   the same layouts drawn as SVG/CSS in headless Chromium, restyled per port with a stylesheet.
 - `tools/studio.py` + `tools/skin_template.svg`: the skin studio. Auto-layout from a port's
-  parameters, an Inkscape/Penpot SVG round trip, and page previews. See [docs/SKIN_STUDIO.md](docs/SKIN_STUDIO.md).
+  parameters, a browser editor (`studio.py serve`, `tools/studio_web/`), an Inkscape/Penpot SVG round trip, and page
+  previews. See [docs/SKIN_STUDIO.md](docs/SKIN_STUDIO.md).
 - `tools/test_port.sh` + `tools/host_test.c`: the offline x86 test of a port under ASan (instances, params, options,
   popups, MIDI→audio, legacy `process()`, chunks), PASSED/FAILED.
 - `tools/bench.sh` + `tools/bench.c`: a CPU stress test run on the device, with a PASS/WARN/FAIL verdict for Gen1

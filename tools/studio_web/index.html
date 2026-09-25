@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skin Studio</title>
+<!-- the renderer's own stylesheet, then the layout's art_css (added by app.js): the canvas looks like the baked skin -->
+<link rel="stylesheet" href="/html_art/default.css" id="art-default">
+<link rel="stylesheet" href="/web/app.css">
+</head>
+<body>
+<header class="ui-top">
+  <div class="ui-brand">Skin Studio <span id="file" class="ui-file"></span><span id="dirty" class="ui-dirty" hidden title="Unsaved changes">●</span></div>
+  <div class="ui-tools">
+    <button id="undo" title="Undo (Ctrl+Z)">Undo</button>
+    <button id="redo" title="Redo (Ctrl+Shift+Z)">Redo</button>
+    <span class="ui-sep"></span>
+    <label class="ui-check" title="MPC's own text (names, values), drawn by the device over the skin"><input type="checkbox" id="v-live" checked> Live text</label>
+    <label class="ui-check" title="Outline every widget"><input type="checkbox" id="v-bounds"> Bounds</label>
+    <label class="ui-check" title="Q-Link numbers of the selected set"><input type="checkbox" id="v-qlinks" checked> Q-Links</label>
+    <label class="ui-check" title="The 8 slots x 2 rows the auto-layout uses (row 1 = Q-Link bank 1)"><input type="checkbox" id="v-slots"> Slots</label>
+    <label class="ui-check" title="Show widgets of other modes, dimmed"><input type="checkbox" id="v-modes"> Other modes</label>
+    <span class="ui-sep"></span>
+    <label>Snap <select id="snap"><option value="1">1</option><option value="2" selected>2</option><option value="4">4</option><option value="8">8</option><option value="16">16</option></select></label>
+    <label>Zoom <select id="zoom"><option value="fit" selected>Fit</option><option value="0.5">50%</option><option value="1">100%</option><option value="1.5">150%</option></select></label>
+    <span class="ui-sep"></span>
+    <button id="save" class="ui-primary" title="Save the layout (Ctrl+S)">Save</button>
+  </div>
+</header>
+
+<main class="ui-main">
+  <aside class="ui-left">
+    <section>
+      <h2>Add</h2>
+      <div id="palette" class="ui-palette"></div>
+      <button id="import-art" class="ui-wide" title="Upload an SVG drawing next to the layout and add it as this tab's background art">Import SVG art…</button>
+      <input type="file" id="art-file" accept=".svg,image/svg+xml" hidden>
+    </section>
+    <section class="ui-grow">
+      <h2>Layers <span class="ui-hint">file order; frames and art draw behind controls</span></h2>
+      <ol id="layers" class="ui-layers"></ol>
+      <div class="ui-row">
+        <button id="layer-up" title="Draw earlier (further back)">▲</button>
+        <button id="layer-down" title="Draw later (in front)">▼</button>
+        <button id="dup" title="Duplicate (Ctrl+D)">Duplicate</button>
+        <button id="del" title="Delete (Del)">Delete</button>
+      </div>
+    </section>
+  </aside>
+
+  <section class="ui-center">
+    <nav class="ui-tabs" id="tabs"></nav>
+    <div id="modes" class="ui-modes" hidden></div>
+    <div class="ui-stage" id="stage">
+      <svg id="canvas" xmlns="http://www.w3.org/2000/svg" viewBox="0 86 1280 628">
+        <g id="defs"></g>
+        <rect id="plate" x="0" y="86" width="1280" height="628"/>
+        <g id="l-widgets"></g>
+        <g id="l-live"></g>
+        <g id="l-over"></g>
+      </svg>
+    </div>
+    <div class="ui-status" id="status"></div>
+  </section>
+
+  <aside class="ui-right">
+    <nav class="ui-paneltabs" id="paneltabs">
+      <button data-p="inspect" class="ui-on">Inspect</button>
+      <button data-p="qlinks">Q-Links</button>
+      <button data-p="theme">Theme</button>
+      <button data-p="css">Style</button>
+      <button data-p="checks">Checks <span id="check-count" class="ui-badge" hidden></span></button>
+    </nav>
+    <div class="ui-panel" id="p-inspect"></div>
+    <div class="ui-panel" id="p-qlinks" hidden></div>
+    <div class="ui-panel" id="p-theme" hidden></div>
+    <div class="ui-panel" id="p-css" hidden></div>
+    <div class="ui-panel" id="p-checks" hidden></div>
+  </aside>
+</main>
+<div id="toast" class="ui-toast" hidden></div>
+<script src="/web/app.js"></script>
+</body>
+</html>
