@@ -62,7 +62,7 @@ layouts render on device (every port since Maze Voice).
   `Bank Direction: Column`, the Force's 8 knobs read bank 1 = Q-Links 13,9,5,1,14,10,6,2 and bank 2 = those +2.
   `gen_vst.py` lays each page out as 2 rows of 8 (row = knob bank) and maps through that order.
 - Custom geometry (2026-09-23): `tools/shadow_skin.py` takes a Force Shadow style layout file per port
-  (Maze: `force-maze/maze-voice/vst/layout.conf`) and emits `TUI.json` with free placement, a per-tab
+  (Maze: `mpc-vst-maze/vst/layout.conf`) and emits `TUI.json` with free placement, a per-tab
   background image (frames and labels baked in), a knob filmstrip per radius (128 frames, `numFrames` 127, as in
   stock strips), and on/off images for toggles, triggers and option segments. Shadow canvas y 86..714 maps to the
   1280x628 plugin area. Several `qlinks` lines in one tab become nested pages that share the design but have

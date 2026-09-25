@@ -12,7 +12,7 @@
 
 ## Quick start (block-rendering engine)
 Add a `vst.json` next to the engine (format in `tools/gen_vst.py`'s docstring; example:
-`force-maze/maze-voice/vst/vst.json`), then run `tools/build_port.sh path/to/vst.json`. That builds the skin from
+`mpc-vst-maze/vst/vst.json`), then run `tools/build_port.sh path/to/vst.json`. That builds the skin from
 `layout` (or from an auto-layout when there's none, which is a good first pass), `params.h`, the `.so` (linked with
 `wrapper/vst2_wrap.c`) and `pluginlist-entry.xml`, all in `build/` next to `vst.json`. The port's own `build.sh` should
 just call it. Don't vendor copies of the wrapper or tools. Then bench it (docs/BENCH.md) and package it (docs/RELEASING.md).

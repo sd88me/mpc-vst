@@ -8,7 +8,7 @@ description: Build, skin, register and test native VST2 plugins for the built-in
 
 This skill lives in the repo (https://github.com/sd88me/mpc-vst-plugins). Read `docs/NOTES.md` first (verified facts,
 open issues, resume point) and `docs/PORTING.md` (step-by-step checklist). Reference port: Maze Voice in
-https://github.com/sd88me/force-maze, `maze-voice/vst/` (vst.json, layout.conf; build.sh just calls `tools/build_port.sh`).
+https://github.com/sd88me/mpc-vst-maze, `vst/` (vst.json, layout.conf; build.sh just calls `tools/build_port.sh`).
 Device: reached over SSH as root. BusyBox userland (`head -n 5`, no `grep -b`), and the IP is DHCP, so ask
 the user for it. **Ask before restarting MPC** (`systemctl restart acvs`), because it takes the screen down.
 Stop any separately attached audio engines first.
@@ -78,7 +78,7 @@ Name ports plainly (e.g. client "<Plugin>", port "MIDI Out"): no "(Mockba)" suff
 references kept out of mpc-vst.
 
 ## Custom layouts from Force Shadow pages (preferred for final skins)
-Put a `layout.conf` next to the port's vst.json (Maze: `force-maze/maze-voice/vst/layout.conf`), in
+Put a `layout.conf` next to the port's vst.json (Maze: `mpc-vst-maze/vst/layout.conf`), in
 shadow_page.conf widget syntax plus `qlinks "PAGE" = key,...` lines (each one is a nested page with the same design and
 its own Q-Links) and `rows=` on enum_h, and set `"layout"` in vst.json. gen_vst.py then calls `shadow_skin.py` (mpc-vst/tools), which drives
 `shadow_art` (built from `shadow_art.c` with `-I<force-shadow>/tools`, since it #includes render_conf_preview.c) to draw
