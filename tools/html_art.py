@@ -6,8 +6,14 @@ same PPM files, so the layout, the skin builder and the skin format don't change
 Each drawing becomes SVG styled by CSS (tools/html_art/default.css, then the layout's own `art_css=` file),
 so a port can use any font, knob style, gradient or shadow. Geometry comes from the commands as before.
 
-One extra command, which only this renderer has:
-  svg|file.svg|x|y|w|h     draw an SVG drawing into that box (a layout's `art file=...` line)
+Extra commands, which only this renderer has (looks and images: tools/skin_assets.py; LOOK is its JSON):
+  svg|file.svg|x|y|w|h                 draw an SVG drawing into that box (a layout's `art file=...` line)
+  image|file|x|y|w|h|fit               draw an image file into that box (fit: contain, cover or stretch)
+  iframe|x|y|w|h|title|file            a frame drawn as a panel picture (stretched), its title on top
+  lstrip|out|r|frames|LOOK             a knob filmstrip with a look (built-in, turning image, or a filmstrip)
+  lsstrip|out|w|h|frames|vert|LOOK     a slider filmstrip with a look
+  ltog|x|y|on|w|h|LOOK                 a toggle with a look;  lbtn|x|y|w|h|on|label|LOOK   a button
+  lseg|x|y|w|h|on|ink|label|LOOK       an option segment over an image
 
 Controls (knob and slider strips, toggles, buttons, option segments, tiles: a canvas holding just one of them)
 come out with a transparent background, so they sit on any artwork; they are written as RGBA PNG data under the
@@ -26,6 +32,7 @@ from html import escape
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import shadow_skin  # noqa: E402  (button sizes must match the skin builder's own)
+import skin_assets  # noqa: E402
 
 W, H = 1280, 800
 # theme_<key> -> CSS variable --<key with dashes>; defaults are render_conf_preview.c's
@@ -42,7 +49,100 @@ DEFS = """<defs>
 <radialGradient id="sheen-radial" cx="0.35" cy="0.3" r="0.8">
  <stop offset="0" stop-color="#fff" style="stop-opacity:calc(var(--sheen) * 2.5)"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>
 </radialGradient>
+<radialGradient id="metal-radial" cx="0.4" cy="0.35" r="0.75">
+ <stop offset="0" stop-color="#f6f6f4"/><stop offset="0.55" stop-color="#b9b9b6"/><stop offset="1" stop-color="#6c6c69"/>
+</radialGradient>
+<linearGradient id="metal-linear" x1="0" y1="0" x2="1" y2="1">
+ <stop offset="0" stop-color="#e8e8e6"/><stop offset="0.5" stop-color="#8e8e8b"/><stop offset="1" stop-color="#d6d6d3"/>
+</linearGradient>
 </defs>"""
+
+
+# ---- built-in looks (skin_assets.LOOKS). Parts carry look-* classes, coloured in default.css, so a stylesheet can
+# recolour them. a = the knob's angle in degrees (0 = up); what turns sits in a rotated group.
+
+def _turn(a, cx, cy, body):
+    return '<g transform="rotate(%.2f %g %g)">%s</g>' % (a, cx, cy, body)
+
+
+def knob_moog(cx, cy, r, a):
+    """Black knob with a knurled skirt, a white line and a metal cap (the 1970s synth knob)."""
+    R = r + 3
+    n = max(24, int(R * 1.2))
+    dash = 2 * math.pi * (R - 2) / n / 2
+    return ('<circle class="look-skirt" cx="%g" cy="%g" r="%g"/>' % (cx, cy, R) +
+            _turn(a, cx, cy, '<circle class="look-knurl" cx="%g" cy="%g" r="%g" style="stroke-width:3.5;stroke-dasharray:%.2f %.2f"/>'
+                  % (cx, cy, R - 2, dash, dash)) +
+            '<circle class="look-body" cx="%g" cy="%g" r="%g"/>' % (cx, cy, R * 0.84) +
+            _turn(a, cx, cy, '<line class="look-line" x1="%g" y1="%g" x2="%g" y2="%g" style="stroke-width:%g"/>'
+                  % (cx, cy - R * 0.55, cx, cy - R * 0.8, max(2, r / 11))) +
+            '<circle class="look-cap" cx="%g" cy="%g" r="%g"/>' % (cx, cy, R * 0.5) +
+            '<circle class="knob-sheen" cx="%g" cy="%g" r="%g"/>' % (cx, cy, R * 0.84))
+
+
+def knob_chicken(cx, cy, r, a):
+    """A pointed chicken-head knob over a round base."""
+    R = r + 3
+    head = ('<path class="look-head" d="M0,-0.98 C0.12,-0.98 0.44,0.02 0.44,0.3 A0.44,0.44 0 0 1 -0.44,0.3 '
+            'C-0.44,0.02 -0.12,-0.98 0,-0.98 Z"/><path class="look-line" d="M0,-0.86 L0,-0.32" style="stroke-width:0.07"/>'
+            '<circle class="knob-sheen" cx="0" cy="0.25" r="0.4"/>')
+    return ('<circle class="look-base" cx="%g" cy="%g" r="%g"/>' % (cx, cy, R * 0.9) +
+            '<g transform="translate(%g %g) rotate(%.2f) scale(%g)">%s</g>' % (cx, cy, a, R, head))
+
+
+def knob_metal(cx, cy, r, a):
+    """Brushed aluminium with a notch."""
+    R = r + 3
+    return ('<circle class="look-metal" cx="%g" cy="%g" r="%g"/>' % (cx, cy, R) +
+            '<circle class="look-metal-top" cx="%g" cy="%g" r="%g"/>' % (cx, cy, R * 0.82) +
+            _turn(a, cx, cy, '<line class="look-notch" x1="%g" y1="%g" x2="%g" y2="%g" style="stroke-width:%g"/>'
+                  % (cx, cy - R * 0.3, cx, cy - R * 0.76, max(2, r / 10))) +
+            '<circle class="knob-sheen" cx="%g" cy="%g" r="%g"/>' % (cx, cy, R * 0.82))
+
+
+def knob_cap(cx, cy, r, a):
+    """A coloured cap on a dark ring (the theme's knob_dot and knob_ring)."""
+    R = r + 2
+    return ('<circle class="look-cap-ring" cx="%g" cy="%g" r="%g"/>' % (cx, cy, R) +
+            '<circle class="look-cap-top" cx="%g" cy="%g" r="%g"/>' % (cx, cy, R * 0.8) +
+            '<circle class="knob-sheen" cx="%g" cy="%g" r="%g"/>' % (cx, cy, R * 0.8) +
+            _turn(a, cx, cy, '<line class="look-line" x1="%g" y1="%g" x2="%g" y2="%g" style="stroke-width:%g"/>'
+                  % (cx, cy - R * 0.25, cx, cy - R * 0.7, max(2, r / 10))))
+
+
+KNOB_LOOKS = {"moog": knob_moog, "chicken": knob_chicken, "metal": knob_metal, "cap": knob_cap}
+
+
+def fader_track(x, y, w, h, vert, th):
+    """A mixer fader's slot with a tick scale (th: the cap's length along the travel)."""
+    o = ""
+    if vert:
+        o += '<rect class="look-slot" x="%g" y="%g" width="6" height="%g" rx="3"/>' % (x + w / 2 - 3, y + 4, h - 8)
+        for k in range(11):
+            ty = y + th / 2 + k * (h - th) / 10
+            o += '<line class="look-tick" x1="%g" y1="%g" x2="%g" y2="%g"/><line class="look-tick" x1="%g" y1="%g" x2="%g" y2="%g"/>' % (
+                x + 1, ty, x + w / 2 - 7, ty, x + w / 2 + 7, ty, x + w - 1, ty)
+    else:
+        o += '<rect class="look-slot" x="%g" y="%g" width="%g" height="6" rx="3"/>' % (x + 4, y + h / 2 - 3, w - 8)
+        for k in range(11):
+            tx = x + th / 2 + k * (w - th) / 10
+            o += '<line class="look-tick" x1="%g" y1="%g" x2="%g" y2="%g"/><line class="look-tick" x1="%g" y1="%g" x2="%g" y2="%g"/>' % (
+                tx, y + 1, tx, y + h / 2 - 7, tx, y + h / 2 + 7, tx, y + h - 1)
+    return o
+
+
+def fader_cap(x, y, w, h, vert):
+    """A fader cap filling the box x,y,w,h, with grip ridges and a centre line."""
+    o = '<rect class="look-fader" x="%g" y="%g" width="%g" height="%g" rx="3"/>' % (x, y, w, h)
+    if vert:
+        for f in (0.25, 0.75):
+            o += '<line class="look-ridge" x1="%g" y1="%g" x2="%g" y2="%g"/>' % (x + 3, y + h * f, x + w - 3, y + h * f)
+        o += '<line class="look-line" x1="%g" y1="%g" x2="%g" y2="%g" style="stroke-width:2"/>' % (x + 2, y + h / 2, x + w - 2, y + h / 2)
+    else:
+        for f in (0.25, 0.75):
+            o += '<line class="look-ridge" x1="%g" y1="%g" x2="%g" y2="%g"/>' % (x + w * f, y + 3, x + w * f, y + h - 3)
+        o += '<line class="look-line" x1="%g" y1="%g" x2="%g" y2="%g" style="stroke-width:2"/>' % (x + w / 2, y + 2, x + w / 2, y + h - 2)
+    return o
 
 
 def hexc(s):
@@ -50,7 +150,9 @@ def hexc(s):
 
 
 class Art:
-    def __init__(self):
+    def __init__(self, href=None):
+        self.href = href         # the editor's path -> URL; None: the renderer inlines each image once (page defs)
+        self.images = {}         # image path -> its id in the page's defs (renderer)
         self.theme = dict(THEME)
         self.td3 = False
         self.css = []            # the port's own stylesheet(s)
@@ -109,18 +211,126 @@ class Art:
         return '<g class="knob">%s</g>' % o
 
     def slider_svg(self, x, y, w, h, vert, t):
+        return "".join(self.slider_parts(x, y, w, h, vert, t))
+
+    def slider_parts(self, x, y, w, h, vert, t):
+        """The stock slider as (well and fill, thumb)."""
         o = '<rect class="slider-well" x="%d" y="%d" width="%d" height="%d" rx="%g"/>' % (x, y, w, h, (w if vert else h) / 2)
         pad = 4
         th = (w if vert else h) - 2 * pad
         if vert:
             ty = y + pad + round((1 - t) * (h - 2 * pad - th))
             o += '<rect class="slider-fill" x="%g" y="%d" width="6" height="%d" rx="3"/>' % (x + w / 2 - 3, ty + th // 2, max(0, y + h - pad - (ty + th // 2)))
-            o += '<circle class="slider-thumb" cx="%g" cy="%g" r="%g"/>' % (x + w / 2, ty + th / 2, th / 2)
+            return o, '<circle class="slider-thumb" cx="%g" cy="%g" r="%g"/>' % (x + w / 2, ty + th / 2, th / 2)
+        tx = x + pad + round(t * (w - 2 * pad - th))
+        o += '<rect class="slider-fill" x="%d" y="%g" width="%d" height="6" rx="3"/>' % (x + pad, y + h / 2 - 3, max(0, tx + th // 2 - x - pad))
+        return o, '<circle class="slider-thumb" cx="%g" cy="%g" r="%g"/>' % (tx + th / 2, y + h / 2, th / 2)
+
+    # ---- images and looks ----
+    def image(self, path, x, y, w, h, fit="contain", vb=None):
+        """An image file drawn into the box x,y,w,h (fit: contain, cover or stretch); vb: a region of it (a
+        filmstrip frame). The renderer puts each file in the page once (a data: URI) and uses it by reference."""
+        iw, ih = skin_assets.image_size(path)
+        if not iw or not ih or w <= 0 or h <= 0:
+            return ""
+        if self.href:
+            inner = '<image href="%s" width="%d" height="%d" preserveAspectRatio="none"/>' % (escape(self.href(path)), iw, ih)
         else:
-            tx = x + pad + round(t * (w - 2 * pad - th))
-            o += '<rect class="slider-fill" x="%d" y="%g" width="%d" height="6" rx="3"/>' % (x + pad, y + h / 2 - 3, max(0, tx + th // 2 - x - pad))
-            o += '<circle class="slider-thumb" cx="%g" cy="%g" r="%g"/>' % (tx + th / 2, y + h / 2, th / 2)
-        return o
+            self.images.setdefault(path, "img%d" % len(self.images))
+            inner = '<use href="#%s"/>' % self.images[path]
+        par = {"cover": "xMidYMid slice", "stretch": "none"}.get(fit, "xMidYMid meet")
+        return '<svg x="%g" y="%g" width="%g" height="%g" viewBox="%s" preserveAspectRatio="%s" overflow="hidden">%s</svg>' % (
+            x, y, w, h, vb or "0 0 %d %d" % (iw, ih), par, inner)
+
+    def strip_frame(self, path, x, y, w, h, t, frames=None, aspect=1.0):
+        """The frame of a filmstrip for value t (0..1), drawn into the box."""
+        iw, ih, n, down = skin_assets.strip_layout(path, frames, aspect)
+        i = min(n - 1, max(0, round(t * (n - 1))))
+        vb = "0 %g %g %g" % (i * ih / n, iw, ih / n) if down else "%g 0 %g %g" % (i * iw / n, iw / n, ih)
+        return self.image(path, x, y, w, h, "contain", vb)
+
+    def lit(self, look, on, x, y, w, h, fit="contain"):
+        """An on/off image: img off, img_on on (or img brightened)."""
+        if on and look.get("img_on"):
+            return self.image(look["img_on"], x, y, w, h, fit)
+        o = self.image(look["img"], x, y, w, h, fit)
+        return '<g class="look-lit">%s</g>' % o if on else o
+
+    def knob_frame(self, cx, cy, r, pct, look):
+        """One knob position (pct 0..100): the stock drawing, a built-in look, a turning image over a still base,
+        or a filmstrip frame, all in the same 2r+8 box."""
+        if not look:
+            return self.knob_svg(cx, cy, r, pct)
+        a = -135.0 + 270.0 * pct / 100.0
+        b = (cx - r - 4, cy - r - 4, 2 * r + 8, 2 * r + 8)
+        if look.get("strip"):
+            o = self.strip_frame(look["strip"], *b, pct / 100.0, look.get("frames"))
+        else:
+            o = self.image(look["base"], *b) if look.get("base") else ""
+            if look.get("img"):
+                o += _turn(a, cx, cy, self.image(look["img"], *b))
+            elif look.get("look") in KNOB_LOOKS:
+                o += KNOB_LOOKS[look["look"]](cx, cy, r, a)
+        return '<g class="knob look-%s">%s</g>' % (look.get("look", "image"), o)
+
+    def slider_frame(self, x, y, w, h, vert, t, look):
+        """One slider position (t 0..1) with a look: track (base image, fader slot or stock) and thumb."""
+        if not look:
+            return self.slider_svg(x, y, w, h, vert, t)
+        if look.get("strip"):
+            return self.strip_frame(look["strip"], x, y, w, h, t, look.get("frames"), h / max(1, w))
+        fader = look.get("look") == "fader"
+        track, thumb = self.slider_parts(x, y, w, h, vert, t)
+        if look.get("img"):
+            iw, ih = skin_assets.image_size(look["img"])
+            if vert:
+                tw, th = w, min(h / 2, w * ih / max(1, iw))
+            else:
+                tw, th = min(w / 2, h * iw / max(1, ih)), h
+        elif fader:
+            tw, th = (w, max(14, min(w * 0.55, h / 4))) if vert else (max(14, min(h * 0.55, w / 4)), h)
+        else:
+            tw = th = 0
+        tx, ty = (x, y + (1 - t) * (h - th)) if vert else (x + t * (w - tw), y)
+        if look.get("base"):
+            track = self.image(look["base"], x, y, w, h, "stretch")
+        elif fader:
+            track = fader_track(x, y, w, h, vert, th if vert else tw)
+        if look.get("img"):
+            thumb = self.image(look["img"], tx, ty, tw, th)
+        elif fader:
+            thumb = fader_cap(tx, ty, tw, th, vert)
+        return '<g class="slider look-%s">%s%s</g>' % (look.get("look", "image"), track, thumb)
+
+    def toggle_frame(self, cx, cy, on, w, h, look):
+        """A toggle with a look, centred on cx,cy in a w x h box."""
+        x, y = cx - w / 2, cy - h / 2
+        name = look.get("look", "image")
+        if look.get("img"):
+            o = self.lit(look, on, x, y, w, h)
+        elif name == "led":
+            r = min(w, h) / 2 - 3
+            o = ('<circle class="look-led-bezel" cx="%g" cy="%g" r="%g"/><circle class="look-led" cx="%g" cy="%g" r="%g"/>'
+                 '<circle class="look-led-glint" cx="%g" cy="%g" r="%g"/>') % (cx, cy, r + 2, cx, cy, r, cx - r * 0.35, cy - r * 0.35, r * 0.3)
+        else:   # switch: a bat lever, up for on
+            nut = min(w, h * 0.6) / 2
+            tip = y + w * 0.2 if on else y + h - w * 0.2
+            o = ('<circle class="look-nut" cx="%g" cy="%g" r="%g"/>'
+                 '<path class="look-bat" d="M%g %g L%g %g L%g %g L%g %g Z"/><circle class="look-bat-tip" cx="%g" cy="%g" r="%g"/>') % (
+                cx, cy, nut, cx - w * 0.11, cy, cx + w * 0.11, cy, cx + w * 0.06, tip, cx - w * 0.06, tip, cx, tip, w * 0.17)
+        return '<g class="toggle look-%s%s">%s</g>' % (name, " on" if on else "", o)
+
+    def button_frame(self, x, y, w, h, on, label, look):
+        """A button drawn from its on/off images, the label on top."""
+        o = self.lit(look, on, x, y, w, h, "stretch")
+        if label:
+            o += self.text(x + w / 2, y + h / 2, label, "button-tx")
+        return '<g class="button look-image%s">%s</g>' % (" on" if on else "", o)
+
+    def seg_frame(self, x, y, w, h, on, ink, label, look):
+        """An option segment drawn from its on/off images, the option's name on top."""
+        o = self.lit(look, on, x, y, w, h, "stretch") + self.text(x + w / 2, y + h / 2, label, "seg-tx")
+        return '<g class="seg look-image%s" style="--ink:%s">%s</g>' % (" on" if on else "", hexc(ink), o)
 
     def box_label(self, x0, y0, label):
         return self.text(x0, y0 - 15, label, "box-label", "start") if label else ""
@@ -228,8 +438,32 @@ class Art:
             self.ops.append(o + "</g>")
         elif op == "svg" and n == 6:
             self.svg_file(a[1], I(2), I(3), I(4), I(5))
+        elif op == "iframe" and n == 7:
+            x, y = I(1), I(2)
+            o = self.image(a[6], x, y, I(3), I(4), "stretch")
+            if a[5] != "-":
+                o += self.text(x + 18, y + 20, a[5], "frame-title", "start")
+            self.ops.append('<g class="frame look-image">%s</g>' % o)
+        elif op == "image" and n == 7:
+            self.ops.append(self.image(a[1], I(2), I(3), I(4), I(5), a[6]))
+        elif op == "ltog" and n == 7:
+            self.ops.append(self.toggle_frame(I(1) + I(4) / 2, I(2) + I(5) / 2, I(3), I(4), I(5), skin_assets.decode(a[6])))
+        elif op == "lbtn" and n == 8:
+            self.ops.append(self.button_frame(I(1), I(2), I(3), I(4), I(5), a[6], skin_assets.decode(a[7])))
+        elif op == "lseg" and n == 9:
+            self.ops.append(self.seg_frame(I(1), I(2), I(3), I(4), I(5), a[6], a[7], skin_assets.decode(a[8])))
+        elif op == "lstrip" and n == 5:
+            r, frames, look = I(2), I(3), skin_assets.decode(a[4])
+            s = 2 * r + 10
+            self.jobs.append(("strip", a[1], s, s, frames,
+                              [self.knob_frame(s / 2, s / 2, r, 100.0 * k / (frames - 1), look) for k in range(frames)]))
+        elif op == "lsstrip" and n == 7:
+            w, h, frames, vert, look = I(2), I(3), I(4), I(5), skin_assets.decode(a[6])
+            self.jobs.append(("strip", a[1], w, h, frames,
+                              [self.slider_frame(0, 0, w, h, vert, k / (frames - 1), look) for k in range(frames)]))
         elif op == "crop" and n == 6:
-            lone = self.kinds[:1] == ["clear"] and len(self.kinds) == 2 and self.kinds[1] in ("pill", "button", "seg", "tile", "knob")
+            lone = self.kinds[:1] == ["clear"] and len(self.kinds) == 2 and self.kinds[1] in (
+                "pill", "button", "seg", "tile", "knob", "ltog", "lbtn", "lseg")
             svg = "".join(self.ops[1:] if lone else self.ops)
             self.jobs.append(("crop", svg, a[1], I(2), I(3), I(4), I(5), lone))
         elif op == "strip" and n == 5:
@@ -245,14 +479,27 @@ class Art:
             raise SystemExit("html_art: bad command: %s (%d fields)" % (op, n))
 
     # ---- rendering ----
+    def image_defs(self):
+        """Each image the drawings use, once, as a data: URI (they refer to it with <use>)."""
+        import base64
+        out = []
+        for path, iid in self.images.items():
+            iw, ih = skin_assets.image_size(path)
+            mime = skin_assets.MIME.get(os.path.splitext(path)[1].lower(), "image/png")
+            with open(path, "rb") as f:
+                data = base64.b64encode(f.read()).decode()
+            out.append('<image id="%s" width="%d" height="%d" preserveAspectRatio="none" href="data:%s;base64,%s"/>' % (
+                iid, iw, ih, mime, data))
+        return "<defs>%s</defs>" % "".join(out) if out else ""
+
     def page(self):
         css = ['<link rel="stylesheet" href="file://%s">' % os.path.join(HERE, "html_art", "default.css")]
         css += ['<link rel="stylesheet" href="file://%s">' % os.path.abspath(c) for c in self.css]
         vars_ = ";".join("--%s:%s" % (k.replace("_", "-"), hexc(v)) for k, v in self.theme.items())
         return ('<!doctype html><html><head><meta charset="utf-8"><style>:root{%s}html,body{margin:0;background:transparent}'
                 'svg{display:block}</style>%s</head><body><svg id="c" xmlns="http://www.w3.org/2000/svg" class="%s" '
-                'width="%d" height="%d">%s<g id="g"></g></svg></body></html>') % (
-            vars_, "".join(css), "td3" if self.td3 else "", W, H, DEFS)
+                'width="%d" height="%d">%s%s<g id="g"></g></svg></body></html>') % (
+            vars_, "".join(css), "td3" if self.td3 else "", W, H, DEFS, self.image_defs())
 
     def render(self):
         from PIL import Image
