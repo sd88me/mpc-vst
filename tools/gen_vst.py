@@ -140,15 +140,8 @@ def main():
         return
     plist, sections = params.load(os.path.join(here, src))
     import shadow_skin
-    if cfg.get("layout"):
-        plist = plist + shadow_skin.popup_params(os.path.join(here, cfg["layout"]), plist)
     os.makedirs(build, exist_ok=True)
-    gen_params(cfg, plist, os.path.join(build, "params.h"))
-    print("params.h: %d params" % len(plist))
-    if sys.argv[2:] == ["--params-h"]:
-        return
-    open(os.path.join(build, "pluginlist-entry.xml"), "w").write(entry(cfg) + "\n")
-
+    # The layout comes first: its popups (the auto-layout makes one for 7+ options) add hidden params.
     if cfg.get("layout"):
         layout = os.path.join(here, cfg["layout"])
     else:
@@ -157,6 +150,13 @@ def main():
         layout = os.path.join(build, "layout.auto.conf")
         open(layout, "w").write(studio.auto_layout(ps, sections))
         print("no layout in vst.json: auto-layout written to", layout)
+    plist = plist + shadow_skin.popup_params(layout, plist)
+    gen_params(cfg, plist, os.path.join(build, "params.h"))
+    print("params.h: %d params" % len(plist))
+    if sys.argv[2:] == ["--params-h"]:
+        return
+    open(os.path.join(build, "pluginlist-entry.xml"), "w").write(entry(cfg) + "\n")
+
     import shutil
     shutil.rmtree(os.path.join(build, "skin"), ignore_errors=True)   # no stale images from older builds
     art = os.environ.get("SHADOW_ART") or (os.path.join(TOOLS, "html_art.py") if cfg.get("art") == "html"
