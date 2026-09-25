@@ -16,7 +16,34 @@ Building on parameter-driven visibility (`IndexedEnabling`, NOTES "Conditional v
 - [ ] **Meters.** The `meter` widget (a display-only filmstrip) is built; check on a device whether MPC redraws a
       FilmStrip when the engine changes the parameter by itself, and at what rate, with an engine that sets one.
 - [ ] **Tab images.** MPC draws the function-key tab bar; find how stock skins give tabs on/off images (from a
-      stock TUI.json, described in NOTES, not committed) and whether a plugin skin can.
+      stock TUI.json, described in NOTES, not committed) and whether a plugin skin can. `Indicator`
+      (`indicatorId`, `numIndicatorsInGroup`, on/off images — see below) is an unverified candidate.
+- [ ] **A native `Meter` component.** The `meter` widget bakes a `Knob`/FilmStrip readout (called "Meter" only in
+      its JSON name, not a real one). A real `Meter` type (`direction`, `peakImage`, `rmsImage`, `peakHandle`,
+      `rmsHandle`, `peakHoldHandle`/`peakHoldSize`/`peakHoldColour`, `invert`) may be a better foundation —
+      prototyped, unverified, on `claude/native-meter-prototype`. Check both against a real device once it's
+      reachable.
+- [ ] **Native overlays (unverified — from a 2026-01/02 binary reverse-engineering pass cross-checked against 41
+      shipping `TUI.json` files, not our own hardware testing).** Every knob/slider/stepper already fires
+      `Show Overlay "knob overlay"` on Double Click (`shadow_skin.py`'s knob/slider/stepper `_action` calls), but
+      nothing in NOTES.md records what it shows on a device for a VST2 parameter — worth confirming, since
+      (unlike the menu overlay) a big-knob overlay only needs the bound `Data` handle's normalized value, not a
+      live option-text list, so it plausibly already works as shipped. If it does, `NumericOverlay` (not wired up
+      anywhere yet; a typed-entry keypad, same low requirement) is a natural follow-on for precise values.
+      `MenuOverlay` is a different case: it is very likely the same native list picker already confirmed **empty
+      for VST2** (NOTES.md "Native picker (menu overlay): not available to VST2", 2026-09-24) under its real
+      component name, not a new option — `popup` stays the way to do a list.
+- [ ] **`Envelope`/`EnvelopeOverlay`, `XYPad`/`Plotter` (unverified, and in tension with an existing finding).**
+      NOTES.md's "No draggable/graph widgets in plugin skins" (2026-09-24) pulled real `TUI.json` off a device
+      from three stock synths, including TubeSynth (which has genuine ADSR envelopes), and found no
+      Envelope/graph/XY-pad component anywhere — TubeSynth fakes its envelopes with plain knobs, and the
+      conclusion drawn was that no such widget is portable to a plugin skin. The reverse-engineering reference
+      claims both types *are* template-verified terminal components in its own, larger 41-file survey, with a
+      real-looking `Envelope` JSON example (`envelopeName: "Pitch"`, `envelopeType: "ADSFR"`, full handle set).
+      These aren't necessarily contradictory (different instruments, different panels) but need resolving the
+      same way the original finding was made — pull more stock `TUI.json` off a device and find a skin that
+      actually uses one (which stock instrument has a "Pitch" envelope?) — before building anything on it; don't
+      trust a binary string table over an inspected real file.
 
 ## Porting and tooling
 - [ ] **A reference port on `engine.h` + `params.json`** (e.g. `poc/synth.c` turned into a full example), so
