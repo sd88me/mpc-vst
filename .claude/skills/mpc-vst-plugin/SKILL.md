@@ -81,7 +81,7 @@ references kept out of mpc-vst.
 Put a `layout.conf` next to the port's vst.json (Maze: `mpc-vst-maze/vst/layout.conf`), in
 shadow_page.conf widget syntax plus `qlinks "PAGE" = key,...` lines (each one is a nested page with the same design and
 its own Q-Links) and `rows=` on enum_h, and set `"layout"` in vst.json. gen_vst.py then calls `shadow_skin.py` (mpc-vst/tools), which drives
-`shadow_art` (built from `shadow_art.c` with `-I<force-shadow>/tools`, since it #includes render_conf_preview.c) to draw
+`shadow_art` (built from `shadow_art.c` with `-Itools/vendor/force-shadow/tools`, the vendored render_conf_preview.c) to draw
 backgrounds, knob filmstrips and button states. Shadow y−86 = skin y. Option counts must match the parameter's own.
 
 **Copy the theme first, every time.** If the app being ported has its own `addon/shadow_page.conf`,
