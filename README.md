@@ -68,8 +68,8 @@ design.
   Schwung host build unchanged through an adapter.
 - MIDI generators (sequencers, arpeggiators) that play other tracks, synced to MPC's tempo.
 - App-like plugins: things that fetch from the web, stream, or write files that MPC's browser can open.
-- Pages with pop-up option lists, panels that change with a mode, pictures that follow a value, live readouts, and
-  any artwork you like baked into the background.
+- Pages with pop-up option lists, panels that change with a mode, live readouts, and your own look: any font,
+  knob style, gradient or shadow, and artwork drawn in Inkscape, baked into the page.
 - Updating a plugin without restarting MPC: replace the file, remove every copy from the project, insert it again.
 - Shipping a plugin as one zip with an install script.
 
@@ -129,6 +129,8 @@ What's next is in [docs/ROADMAP.md](docs/ROADMAP.md).
   [force-shadow](https://github.com/sd88me/force-shadow)'s own renderer, so the MPC page matches the
   shadow page pixel for pixel. That renderer is vendored in `tools/vendor/force-shadow/`, so no force-shadow
   checkout is needed.
+- `tools/html_art.py` + `tools/html_art/`: the optional browser renderer for skin artwork (`"art": "html"`):
+  the same layouts drawn as SVG/CSS in headless Chromium, restyled per port with a stylesheet.
 - `tools/studio.py` + `tools/skin_template.svg`: the skin studio. Auto-layout from a port's
   parameters, an Inkscape/Penpot SVG round trip, and page previews. See [docs/SKIN_STUDIO.md](docs/SKIN_STUDIO.md).
 - `tools/test_port.sh` + `tools/host_test.c`: the offline x86 test of a port under ASan (instances, params, options,
