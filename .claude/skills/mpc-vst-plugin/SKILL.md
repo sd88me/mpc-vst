@@ -41,6 +41,10 @@ Stop any separately attached audio engines first.
 7. The user tests on the device: plugin list → insert → play → edit screen → Q-Links → save/reload project.
 
 ## Gotchas
+- Integer DSP params: set `"display": "int"`. The wrapper then rounds and keeps the unrounded knob position, so slow
+  Q-Link turns accumulate (else they stick between two values). List-tile highlights need `<key>_on` from the DSP.
+  The orange box on a control is the transparent-able Focus ring, not Q-Link bounds. Details: docs/NOTES.md
+  "Skin design lessons from the jv880 redesign".
 - AEffect magic `'VstP'` 0x56737450 (the forum PoC's value is wrong).
 - `effGetParamName` / `effGetParamDisplay`: JUCE gives large buffers, but still cap your copies.
 - Enum params: the wrapper sends the option index as a number string to the engine's `set_param` and maps

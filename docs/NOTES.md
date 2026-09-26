@@ -600,3 +600,68 @@ MPC limitation.
 RK3288, 4x Cortex-A17 @ 1.8 GHz (governor `performance`), `isolcpus=2-3`. MPC runs `AudioWorker0-3` (SCHED_FIFO),
 one pinned per core, plus `Audio Processing` (prio 20). Plugins run on these workers, so tracks spread across
 cores. `tools/bench.sh` measures a plugin against the 2902 µs block (docs/BENCH.md).
+
+## Skin design lessons from the jv880 redesign (2026-09-26, verified on a Force)
+
+**List tiles: the on/off state must not be the tile's text.** A `list` tile is bound to a string param whose
+`get_param` is the tile's label. The wrapper derived the tile's value with `atof()` on that text, so any name that
+started with a digit ("01 Pop", "10 Bass") read as 1 and drew the "on" border, while "Preset A" read as 0. Symptom:
+highlights on some tiles and not others, on both lists. Fix (wrapper + DSP convention): for a `string_display`
+param the wrapper first asks the DSP for `<key>_on` ("1"/"0") and uses that as the value, falling back to the old
+path if the DSP returns nothing. The DSP answers it with real selection state (jv880: `bank_slot_N_on` = browsed bank,
+`patch_slot_N_on` = loaded patch). MPC does not re-read a button's value on `audioMasterUpdateDisplay`, so
+`run_block` also calls `audioMasterAutomate(i, value)` for each such param whenever its `_on` value changes
+(`last_on[]` caches what the host was told). Without that push the highlight showed only sometimes.
+
+**The orange box on a control is the Focus subcomponent, not the Q-Link bounds.** `_focus()` in `shadow_skin.py`
+adds a `WhenFocussed` outline plus a faint white fill sized to the control's whole placed slot (about 130 x 155 for a
+knob or slider), so on dense envelope pages it spilled over neighbours and the frame below. `hideQLinkBounds` only
+sets a per-component flag and did not remove it; zeroing `qlinkBoundsData` did not either. What worked: make the
+focus style transparent (`backgroundColour` and `outlineColour` `00000000`, `outlineThickness` 0). List tiles keep
+their selected look because that is baked into the tile image, not the focus ring. Page `qlinkBoundsData` is now
+`"0 0 0 0"` and every `hideQLinkBounds` is true.
+
+**Q-Links stuck on integer params (fixed in `wrapper/vst2_wrap.c`).** Symptom: a Q-Link on a 0..127 param flicked
+between two values on a slow turn and would not climb. Causes, in order: (1) the value went to the DSP as `%g` text
+and the DSP `atoi()`ed it, which truncates ("5.99999" -> 5); (2) even rounded, MPC sends a slow turn as a step
+smaller than one integer, and reads the value back from `getParameter`, which is the rounded integer, so every
+nudge is lost. Fix: `norm_to_str` rounds params flagged `"display": "int"`, and the wrapper keeps `shadow[i]`, the
+unrounded position last set, and returns that from `getParameter` while the DSP still holds the value it rounds to
+(dropped if anything else changes the param). Applies to every port with `display: int` params (jv880, dx7).
+Float params (maze) are parsed with `atof` and never had this.
+
+**Native labels ignore `label=`.** A control's name text is the assigned parameter's own name (see "Control names"
+above), so the same key placed twice shows the same name twice. A `REVERB` knob in an OUTPUT frame and the
+reverb frame's `LEVEL` knob both read "REVERB". Don't repeat a key on one page; if a control must appear twice,
+expect identical labels.
+
+**Global CSS knobs and what they touch (`skin.css` `:root`).**
+- `--button-size` sets button text, but the layout sizes each button from a much smaller font estimate
+  (`text_width(label) + 36`, plus 28 + 4 for `style=td3`; "PREV" -> 108 x 52). A wide face at 21 px overflowed; 14 px fits.
+- `--seg-size` (enum segment text, default 17 in a generated skin) and `--label-size` (the baked label above an
+  enum/popup) apply to every page. Segment height is fixed at 33 px in `seg_rects`; only `sw=` is per widget.
+- `--sheen` is one global gradient (buttons, segments, knob faces). A per-button gloss is not possible from CSS.
+- Button colour comes from `theme_btn_bg` and `theme_btn_text` in the layout. Corner radius: override
+  `.button-bg` and `.button-sheen` with `rx: 0` in `skin.css` for square keycaps.
+- Give a `.button-bg` a `stroke` for a bezel; a black button on a dark panel is otherwise invisible.
+
+**Measured spacing on the 1280 x 628 skin canvas** (layout y; the device screen shows it about 25 px lower under
+its own header, and the tab bar cuts off at about layout y 712):
+- A knob's value text sits at about `cy + r + 34 .. cy + r + 58` below its centre (label first, then value).
+  Leave 60 px below `cy` before the next row's knob top, or 70 for r=27.
+- An enum or popup draws its label about 30 px above its centre line; keep that clear of the row above.
+- A frame's title rule is about 28 px below `frame y`; nothing should start within 12 px of it.
+- `readout` with `style=dotmatrix` is 50 px tall, a `button` about 52.
+- Three readouts and two buttons make a convincing single LCD strip: give the gaps a constant width and compute the
+  button width from `button_rect` instead of guessing.
+
+**Adding a param to an existing port.** Append it at the end of `chain_params`. MPC stores values by index, so
+inserting mid-list shifts every later saved value (docs/RELEASING.md, versioning).
+
+**Offline preview needs Pillow.** `tools/studio.py preview` imports `PIL`; on a bare WSL install it is missing and
+there is no `pip`. Preview is what to look at before deploying; without it, deploy the skin alone (skin-only
+changes need no restart, re-insert the plugin) and read the screenshot.
+
+**Integer param display beats truncation everywhere.** Any port with integer DSP params should set
+`"display": "int"` on them (gen_vst.py `int_display`): it fixes the formatting *and* enables the rounding and
+shadow behaviour above.
