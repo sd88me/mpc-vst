@@ -79,6 +79,7 @@ typedef struct {
     int pos;                 /* read position in block; DSP_BLOCK = empty */
     double bpm;
     volatile char release[NPARAMS];  /* momentary params to report back to 0 */
+    signed char last_on[NPARAMS];  /* last "<key>_on" value told to the host, +1 (0 = unknown) */
     volatile char need_update_display;  /* deferred audioMasterUpdateDisplay -- see setParameter() */
     float open[NPARAMS];     /* popup "open" flags (popup.h): kept here, never sent to the DSP or saved */
     char chunk[8192];
@@ -216,6 +217,18 @@ static void run_block(AEffect *e, float **out, int32_t n, int accumulate) {
     if (w->need_update_display) {
         w->need_update_display = 0;
         w->master(&w->fx, audioMasterUpdateDisplay, 0, 0, 0, 0.0f);
+        /* list-tile selection: the host doesn't re-read a button's value on UpdateDisplay, so push changes */
+        for (int i = 0; i < NPARAMS; i++) {
+            if (!PARAMS[i].string_display) continue;
+            char k2[96], b2[16];
+            snprintf(k2, sizeof k2, "%s_on", PARAMS[i].key);
+            if (g_api->get_param(w->dsp, k2, b2, sizeof b2) <= 0) continue;
+            int on = atoi(b2) ? 1 : 0;
+            if (w->last_on[i] != on + 1) {
+                w->last_on[i] = (signed char)(on + 1);
+                w->master(&w->fx, audioMasterAutomate, i, 0, 0, (float)on);
+            }
+        }
     }
     render_frames(w, out, n, accumulate);
 }

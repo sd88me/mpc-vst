@@ -396,12 +396,12 @@ def _local(key, actions, children):
     return {"key": key, "value": {"version": 4, "actions": actions,
                                   "backgroundData": {"version": 1, "focussed": clear, "unfocussed": clear},
                                   "ignoreMousePresses": False, "disableCoarseDataWheel": False, "repeats": 1,
-                                  "hideQLinkBounds": False, "componentsData": children}}
+                                  "hideQLinkBounds": True, "componentsData": children}}
 
 
 def _focus(w, h):
-    return _sub("Focus", {"version": 1, "backgroundColour": "14ffffff", "outlineColour": "ff" + ACCENT_HI,
-                          "backgroundInset": 2.0, "outlineThickness": 2.0},
+    return _sub("Focus", {"version": 1, "backgroundColour": "00000000", "outlineColour": "00000000",
+                          "backgroundInset": 2.0, "outlineThickness": 0.0},
                 _bounds(0, 0, w, h, visible="WhenFocussed"), "Focus")
 
 
@@ -827,7 +827,7 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                 ql["Q-Link %d" % qlink_for_slot(s)] = index[k]
             comp = "%s|%s" % (tab["name"], title)
             pages.append({"version": 3, "tabName": title, "fnKeyIndex": t, "fnKeySubIndex": sp,
-                          "qlinkBoundsData": [qlink_bounds(tab, keys)], "componentName": comp,
+                          "qlinkBoundsData": ["0 0 0 0"], "componentName": comp,
                           "initialSize": "0 0 %d %d" % (W, H), "scale": 1.0})
             qmap.append({"Tab": t + 1, "SubTab": sp + 1, "Bank Direction": "Column", "Q-Links": ql})
             defs[comp] = {"key": comp, "value": {
@@ -835,7 +835,7 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                 "backgroundData": {"version": 1, "focussed": {"version": 1, "colour": "ff" + PLATE, "image": ""},
                                    "unfocussed": {"version": 1, "colour": "ff" + PLATE, "image": ""}},
                 "ignoreMousePresses": False, "disableCoarseDataWheel": False, "repeats": 1,
-                "hideQLinkBounds": False, "componentsData": kids}}
+                "hideQLinkBounds": True, "componentsData": kids}}
 
     for img, sw_, sh_, vert, lid in sorted(sliders):
         if lid:
