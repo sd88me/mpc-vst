@@ -898,7 +898,7 @@ def qlink_bounds(tab, keys):
         if w.get("key") not in keys:
             continue
         if w["kind"] in ("slider_v", "slider_h"):
-            xs += [w["cx"] - max(65, w["w"] // 2), w["cx"] + max(65, w["w"] // 2)]
+            xs += [w["cx"] - w["w"] // 2 - 8, w["cx"] + w["w"] // 2 + 8]
             ys += [w["cy"] - w["h"] // 2, w["cy"] + w["h"] // 2 + 56]
             continue
         if w["kind"] in ("readout", "stepper", "menu", "popup"):
@@ -907,8 +907,8 @@ def qlink_bounds(tab, keys):
             continue
         if w["kind"] == "knob":
             r = w["r"]
-            xs += [w["cx"] - 65, w["cx"] + 65]
-            ys += [w["cy"] - r - 8, w["cy"] + r + 56]
+            xs += [w["cx"] - r - 10, w["cx"] + r + 10]
+            ys += [w["cy"] - r - 8, w["cy"] + r + 40]
         elif w["kind"] in ("button", "meter"):
             continue   # a shared trigger (e.g. GENERATE) would stretch the box across frames; meters take no Q-Link
         elif w["kind"] == "toggle":

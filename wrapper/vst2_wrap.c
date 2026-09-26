@@ -112,6 +112,12 @@ static float get_norm(wrap_t *w, int i) {
     char buf[64];
     if (i < 0 || i >= NPARAMS) return 0;
     if (popup_is(i)) return w->open[i];
+    if (PARAMS[i].string_display) {
+        /* a text param's value is not its text: a DSP may expose "<key>_on" (list-tile selection) */
+        char k2[96];
+        snprintf(k2, sizeof k2, "%s_on", PARAMS[i].key);
+        if (g_api->get_param(w->dsp, k2, buf, sizeof buf) > 0) return atoi(buf) ? 1.0f : 0.0f;
+    }
     if (g_api->get_param(w->dsp, PARAMS[i].key, buf, sizeof buf) <= 0) return PARAMS[i].def;
     return str_to_norm(&PARAMS[i], buf);
 }
