@@ -79,6 +79,7 @@ typedef struct {
     int pos;                 /* read position in block; DSP_BLOCK = empty */
     double bpm;
     volatile char release[NPARAMS];  /* momentary params to report back to 0 */
+    float shadow[NPARAMS];   /* unrounded position last set on an integer param; <0 = none */
     signed char last_on[NPARAMS];  /* last "<key>_on" value told to the host, +1 (0 = unknown) */
     volatile char need_update_display;  /* deferred audioMasterUpdateDisplay -- see setParameter() */
     float open[NPARAMS];     /* popup "open" flags (popup.h): kept here, never sent to the DSP or saved */
@@ -92,6 +93,7 @@ static float clamp01(float v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 /* normalized 0..1 -> DSP display value string */
 static void norm_to_str(const param_t *p, float n, char *buf, int len) {
     if (p->nopts) snprintf(buf, len, "%d", (int)lroundf(clamp01(n) * (p->nopts - 1)));
+    else if (p->int_display) snprintf(buf, len, "%ld", lroundf(p->min + (p->max - p->min) * clamp01(n)));   /* round: a bare %g + atoi() truncates, so a sub-step Q-Link nudge never advances */
     else snprintf(buf, len, "%g", p->min + (p->max - p->min) * clamp01(n));
 }
 
@@ -120,7 +122,16 @@ static float get_norm(wrap_t *w, int i) {
         if (g_api->get_param(w->dsp, k2, buf, sizeof buf) > 0) return atoi(buf) ? 1.0f : 0.0f;
     }
     if (g_api->get_param(w->dsp, PARAMS[i].key, buf, sizeof buf) <= 0) return PARAMS[i].def;
-    return str_to_norm(&PARAMS[i], buf);
+    float v = str_to_norm(&PARAMS[i], buf);
+    /* An integer param is rounded on its way to the DSP, so a Q-Link nudge under one step would read back
+     * as the old value and never accumulate. Hand the host its unrounded position while the DSP still
+     * holds the value that position rounds to; if something else changed it, drop the shadow. */
+    if (PARAMS[i].int_display && !PARAMS[i].nopts && PARAMS[i].max > PARAMS[i].min && w->shadow[i] >= 0) {
+        float half = 0.5f / (PARAMS[i].max - PARAMS[i].min) + 1e-4f;
+        if (fabsf(v - w->shadow[i]) <= half) return w->shadow[i];
+        w->shadow[i] = -1;
+    }
+    return v;
 }
 
 static void setParameter(AEffect *e, int32_t i, float n) {
@@ -173,6 +184,7 @@ static void setParameter(AEffect *e, int32_t i, float n) {
     }
     norm_to_str(p, n, buf, sizeof buf);
     g_api->set_param(w->dsp, PARAMS[i].key, buf);
+    w->shadow[i] = (p->int_display && !p->nopts) ? clamp01(n) : -1;
     if (PARAMS[i].momentary && n > 0.5f) w->release[i] = 1;
     if (!nudge) popup_picked(w->open, w->release, i);   /* a list pick closes it; a Q-Link nudge doesn't */
     w->need_update_display = 1;   /* deferred to processReplacing(), see the step_target branch above */
@@ -311,6 +323,7 @@ __attribute__((visibility("default"))) AEffect *VSTPluginMain(audioMasterCallbac
     if (!g_api) return NULL;
     wrap_t *w = calloc(1, sizeof *w);
     if (!w) return NULL;
+    for (int i = 0; i < NPARAMS; i++) w->shadow[i] = -1;
     w->dsp = g_api->create(MODULE_DIR);
     if (!w->dsp) { free(w); return NULL; }
     w->master = master;
